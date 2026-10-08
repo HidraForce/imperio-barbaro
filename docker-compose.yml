@@ -1,0 +1,20 @@
+services:
+  clanboard:
+    build: .
+    env_file: .env
+    ports:
+      - "2025:2025"
+    volumes:
+      - clanboard-data:/data
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+    restart: unless-stopped
+
+volumes:
+  clanboard-data:
