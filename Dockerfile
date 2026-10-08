@@ -12,6 +12,7 @@ COPY --from=frontend /src/web/dist ./web/dist
 RUN go mod tidy && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/clanboard .
 
 FROM alpine:3.22
+RUN apk add --no-cache ca-certificates
 RUN addgroup -S app && adduser -S -G app app && mkdir -p /data && chown app:app /data
 WORKDIR /app
 COPY --from=backend /out/clanboard ./clanboard

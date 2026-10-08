@@ -34,6 +34,9 @@ func clashTTL(endpoint string) time.Duration {
 
 // Cada recurso tem uma única consulta em andamento, compartilhada entre usuários.
 func (a *app) fetchClash(ctx context.Context, endpoint string) ([]byte, int, error) {
+	if a.db != nil && a.db.postgres {
+		return a.fetchClashShared(ctx, endpoint)
+	}
 	if err := ctx.Err(); err != nil {
 		return nil, 502, fmt.Errorf("A consulta foi cancelada.")
 	}
@@ -110,6 +113,15 @@ func (a *app) pauseClash(value string) {
 }
 
 func (a *app) clashFetchedAt(endpoint string) time.Time {
+	if a.db != nil && a.db.postgres {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		var at int64
+		if err := a.db.QueryRowContext(ctx, `SELECT fetched_at FROM crm_cache WHERE key=?`, a.cacheNamespace()+endpoint).Scan(&at); err == nil {
+			return time.UnixMilli(at).UTC()
+		}
+		return time.Time{}
+	}
 	a.cacheMu.Lock()
 	defer a.cacheMu.Unlock()
 	if entry, ok := a.cache[endpoint]; ok {

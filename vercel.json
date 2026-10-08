@@ -1,0 +1,22 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "services": {
+    "imperio-barbaro-crm": {
+      "root": "web",
+      "runtime": "container",
+      "entrypoint": "Dockerfile",
+      "devCommand": "npm run build && node server.mjs",
+      "bindings": [
+        { "type": "service", "service": "imperio-barbaro-api", "format": "url", "env": "API_URL" }
+      ]
+    },
+    "imperio-barbaro-api": {
+      "root": ".",
+      "runtime": "container",
+      "entrypoint": "Dockerfile"
+    }
+  },
+  "rewrites": [
+    { "source": "/(.*)", "destination": { "service": "imperio-barbaro-crm" } }
+  ]
+}

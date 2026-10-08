@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -25,13 +24,28 @@ type raidRecord struct {
 	SyncedAt         string             `json:"syncedAt"`
 }
 
-func initRaids(db *sql.DB) error {
-	_, err := db.Exec(`CREATE TABLE IF NOT EXISTS raid_reports (
+func initRaids(db *database) error {
+	query := `CREATE TABLE IF NOT EXISTS raid_reports (
  clan_tag TEXT NOT NULL, start_time TEXT NOT NULL, season TEXT NOT NULL,
  roster TEXT NOT NULL, roster_captured_at TEXT NOT NULL,
  roster_during_raid INTEGER NOT NULL, synced_at TEXT NOT NULL,
  PRIMARY KEY (clan_tag, start_time)
- )`)
+ )`
+	if db.postgres {
+		tx, err := db.Begin()
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+		if _, err = tx.Exec(`SELECT pg_advisory_xact_lock(629364820)`); err != nil {
+			return err
+		}
+		if _, err = tx.Exec(query); err != nil {
+			return err
+		}
+		return tx.Commit()
+	}
+	_, err := db.Exec(query)
 	return err
 }
 
@@ -144,6 +158,10 @@ func (a *app) raids(w http.ResponseWriter, r *http.Request) {
 				roster, _ := json.Marshal(clan.MemberList)
 				now := a.clashFetchedAt(base + "/capitalraidseasons?limit=10")
 				rosterAt := a.clashFetchedAt(base)
+				if now.IsZero() || rosterAt.IsZero() {
+					jsonResponse(w, 503, map[string]string{"error": "Não foi possível confirmar a data da consulta. Sincronize novamente."})
+					return
+				}
 				for _, raw := range response.Items {
 					var season struct {
 						StartTime string `json:"startTime"`
@@ -157,7 +175,7 @@ func (a *app) raids(w http.ResponseWriter, r *http.Request) {
 					end, endErr := time.Parse("20060102T150405.000Z", season.EndTime)
 					during := startErr == nil && endErr == nil && !rosterAt.Before(start) && rosterAt.Before(end)
 					_, err := a.db.ExecContext(r.Context(), `INSERT INTO raid_reports (clan_tag,start_time,season,roster,roster_captured_at,roster_during_raid,synced_at) VALUES (?,?,?,?,?,?,?)
-      ON CONFLICT(clan_tag,start_time) DO UPDATE SET season=excluded.season, synced_at=excluded.synced_at`, tag, season.StartTime, string(raw), string(roster), rosterAt.Format(time.RFC3339), during, now.Format(time.RFC3339))
+      ON CONFLICT(clan_tag,start_time) DO UPDATE SET season=excluded.season, synced_at=excluded.synced_at`, tag, season.StartTime, string(raw), string(roster), rosterAt.Format(time.RFC3339), boolInt(during), now.Format(time.RFC3339))
 					if err != nil {
 						jsonResponse(w, 500, map[string]string{"error": "Não foi possível salvar os registros semanais de incursões."})
 						return
@@ -179,4 +197,11 @@ func (a *app) raids(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonResponse(w, 200, map[string]any{"items": records, "warning": warning})
+}
+
+func boolInt(value bool) int {
+	if value {
+		return 1
+	}
+	return 0
 }

@@ -19,6 +19,7 @@ const contactSessionTTL = 10 * time.Minute
 // A senha adicional fica no ambiente; os tokens são aleatórios e só seus hashes
 // permanecem no servidor. O painel guarda o token apenas em memória.
 type contactVault struct {
+	store      *database
 	mu         sync.Mutex
 	configured bool
 	password   [32]byte
@@ -65,6 +66,10 @@ func (v *contactVault) unlock(w http.ResponseWriter, r *http.Request) {
 	ip, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		ip = r.RemoteAddr
+	}
+	if v.store != nil {
+		v.unlockShared(w, r, input.Password, ip)
+		return
 	}
 	v.mu.Lock()
 	defer v.mu.Unlock()
@@ -116,6 +121,10 @@ func (v *contactVault) protect(next http.Handler) http.Handler {
 			securityError(w, 503, "Os contatos estão bloqueados. Configure CONTACTS_PASSWORD no servidor.")
 			return
 		}
+		if v.store != nil {
+			v.protectShared(w, r, next)
+			return
+		}
 		token := r.Header.Get("X-Contacts-Session")
 		key := sha256.Sum256([]byte(token))
 		v.mu.Lock()
@@ -132,6 +141,10 @@ func (v *contactVault) protect(next http.Handler) http.Handler {
 }
 
 func (v *contactVault) lock(w http.ResponseWriter, r *http.Request) {
+	if v.store != nil {
+		v.lockShared(w, r)
+		return
+	}
 	v.mu.Lock()
 	delete(v.sessions, sha256.Sum256([]byte(r.Header.Get("X-Contacts-Session"))))
 	v.mu.Unlock()

@@ -4,3 +4,9 @@
 /web/dist/
 .DS_Store
 README-VERCEL.md
+.vercel/
+.env.local
+.env.*.local
+
+/migration-private*.json
+/backups/

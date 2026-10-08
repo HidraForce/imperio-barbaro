@@ -89,6 +89,7 @@ type failedAccess struct {
 	expires time.Time
 }
 type accessGuard struct {
+	store              *database
 	mu                 sync.Mutex
 	failures           map[string]failedAccess
 	username, password [32]byte
@@ -104,6 +105,10 @@ func (g *accessGuard) middleware(next http.Handler) http.Handler {
 		ip, _, err := net.SplitHostPort(r.RemoteAddr)
 		if err != nil {
 			ip = r.RemoteAddr
+		}
+		if g.store != nil {
+			g.sharedAccess(w, r, next, ip)
+			return
 		}
 		now := g.now()
 		g.mu.Lock()
@@ -138,7 +143,7 @@ func (g *accessGuard) middleware(next http.Handler) http.Handler {
 				g.failures[ip] = entry
 			}
 			g.mu.Unlock()
-			w.Header().Set("WWW-Authenticate", `Basic realm="Império Bárbaro", charset="UTF-8"`)
+			w.Header().Set("WWW-Authenticate", `Basic realm="Império Bárbaro CRM", charset="UTF-8"`)
 			securityError(w, 401, "Informe o usuário e a senha do painel.")
 			return
 		}

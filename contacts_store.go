@@ -32,7 +32,10 @@ const migrateContactPeople = `INSERT INTO contact_people (id,real_name,phone,not
 const migrateContactAccounts = `INSERT INTO contact_accounts (player_tag,contact_id,player_name,clan_id)
  SELECT '#' || UPPER(LTRIM(TRIM(player_tag),'#')),id,player_name,'' FROM contacts`
 
-func initContacts(db *sql.DB) error {
+func initContacts(db *database) error {
+	if db.postgres {
+		return initPostgresContacts(db)
+	}
 	tx, err := db.Begin()
 	if err != nil {
 		return err
@@ -63,7 +66,7 @@ func initContacts(db *sql.DB) error {
 	return tx.Commit()
 }
 
-func listContacts(ctx context.Context, db *sql.DB) ([]contact, error) {
+func listContacts(ctx context.Context, db *database) ([]contact, error) {
 	rows, err := db.QueryContext(ctx, `SELECT p.id,p.real_name,p.phone,p.notes,a.player_tag,a.player_name,a.clan_id
  FROM contact_people p JOIN contact_accounts a ON a.contact_id=p.id ORDER BY p.real_name,p.id,a.player_name,a.player_tag`)
 	if err != nil {
@@ -96,18 +99,19 @@ var errMergeNotes = errors.New("As observações reunidas excedem 1.000 caracter
 var errInvalidMerge = errors.New("Escolha dois contatos diferentes da mesma pessoa.")
 var errAccountInUse = errors.New("Uma das contas já pertence a outro contato. Edite esse contato ou reúna os contatos da mesma pessoa.")
 
-func writeContact(ctx context.Context, db *sql.DB, c *contact) error {
+func writeContact(ctx context.Context, db *database, c *contact) error {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	if c.ID == 0 {
-		result, err := tx.ExecContext(ctx, `INSERT INTO contact_people(real_name,phone,notes) VALUES (?,?,?)`, c.RealName, c.Phone, c.Notes)
-		if err != nil {
+	if db.postgres {
+		if _, err = tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(629364821)`); err != nil {
 			return err
 		}
-		if c.ID, err = result.LastInsertId(); err != nil {
+	}
+	if c.ID == 0 {
+		if err := tx.QueryRowContext(ctx, `INSERT INTO contact_people(real_name,phone,notes) VALUES (?,?,?) RETURNING id`, c.RealName, c.Phone, c.Notes).Scan(&c.ID); err != nil {
 			return err
 		}
 	} else {
@@ -128,7 +132,7 @@ func writeContact(ctx context.Context, db *sql.DB, c *contact) error {
 	}
 	for _, account := range c.Accounts {
 		if _, err = tx.ExecContext(ctx, `INSERT INTO contact_accounts(player_tag,contact_id,player_name,clan_id) VALUES (?,?,?,?)`, account.PlayerTag, c.ID, account.PlayerName, account.ClanID); err != nil {
-			if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			if isUniqueViolation(err) {
 				return errAccountInUse
 			}
 			return err
@@ -137,12 +141,17 @@ func writeContact(ctx context.Context, db *sql.DB, c *contact) error {
 	return tx.Commit()
 }
 
-func eraseContact(ctx context.Context, db *sql.DB, id int64) error {
+func eraseContact(ctx context.Context, db *database, id int64) error {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
+	if db.postgres {
+		if _, err = tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(629364821)`); err != nil {
+			return err
+		}
+	}
 	if _, err = tx.ExecContext(ctx, `DELETE FROM contact_accounts WHERE contact_id=?`, id); err != nil {
 		return err
 	}
@@ -152,7 +161,7 @@ func eraseContact(ctx context.Context, db *sql.DB, id int64) error {
 	return tx.Commit()
 }
 
-func mergeContacts(ctx context.Context, db *sql.DB, targetID, sourceID int64) error {
+func mergeContacts(ctx context.Context, db *database, targetID, sourceID int64) error {
 	if targetID <= 0 || sourceID <= 0 || targetID == sourceID {
 		return errInvalidMerge
 	}
@@ -161,6 +170,11 @@ func mergeContacts(ctx context.Context, db *sql.DB, targetID, sourceID int64) er
 		return err
 	}
 	defer tx.Rollback()
+	if db.postgres {
+		if _, err = tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(629364821)`); err != nil {
+			return err
+		}
+	}
 	var target, source contact
 	for id, c := range map[int64]*contact{targetID: &target, sourceID: &source} {
 		if err = tx.QueryRowContext(ctx, `SELECT real_name,phone,notes FROM contact_people WHERE id=?`, id).Scan(&c.RealName, &c.Phone, &c.Notes); err != nil {

@@ -1,0 +1,38 @@
+name: Validar CRM
+on: [push, pull_request]
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: crm_test
+          POSTGRES_USER: crm_test
+          POSTGRES_PASSWORD: crm_test_disposable
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U crm_test -d crm_test"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      TEST_DATABASE_URL: postgres://crm_test:crm_test_disposable@localhost:5432/crm_test?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: false
+      - run: npm ci
+        working-directory: web
+      - run: npm test
+        working-directory: web
+      - run: npm run build
+        working-directory: web
+      - run: go mod tidy
+      - run: go test -race ./...
+      - run: go build ./...

@@ -1,10 +1,11 @@
 package main
 
 import (
-	"database/sql"
+	"context"
 	"embed"
 	"encoding/json"
 	"errors"
+	"flag"
 	"io"
 	"io/fs"
 	"log"
@@ -12,7 +13,6 @@ import (
 	"net/url"
 	"os"
 	"path"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -27,7 +27,7 @@ import (
 var webFiles embed.FS
 
 type app struct {
-	db            *sql.DB
+	db            *database
 	clash         *http.Client
 	token         string
 	clanTags      map[string]string
@@ -40,6 +40,8 @@ type app struct {
 }
 
 func main() {
+	importFile := flag.String("import-sqlite", "", "Importar exportação SQLite em PostgreSQL vazio e encerrar")
+	flag.Parse()
 	username, password := os.Getenv("APP_USERNAME"), os.Getenv("APP_PASSWORD")
 	if !validCredentials(username, password) {
 		log.Fatal("Defina APP_USERNAME e uma APP_PASSWORD privada no .env antes de iniciar o painel")
@@ -48,15 +50,8 @@ func main() {
 	if contactsPassword != "" && (!validCredentials("contatos", contactsPassword) || contactsPassword == password) {
 		log.Fatal("CONTACTS_PASSWORD deve ter pelo menos 16 caracteres e ser diferente de APP_PASSWORD.")
 	}
-	path := env("DATABASE_PATH", "./data/clan.db")
-	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
-		log.Fatal(err)
-	}
-	db, err := sql.Open("sqlite", path)
+	db, err := openDatabase()
 	if err != nil {
-		log.Fatal(err)
-	}
-	if _, err := db.Exec(`PRAGMA journal_mode=WAL`); err != nil {
 		log.Fatal(err)
 	}
 	if err := initContacts(db); err != nil {
@@ -67,9 +62,25 @@ func main() {
 		log.Fatal(err)
 	}
 
+	if *importFile != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+		if err := importSQLiteExport(ctx, db, *importFile); err != nil {
+			log.Fatal(err)
+		}
+		log.Print("Migração concluída. Contatos e histórico importados; o SQLite original foi preservado.")
+		return
+	}
+
 	assets, err := fs.Sub(webFiles, "web/dist")
 	if err != nil {
 		log.Fatal(err)
+	}
+	vault := newContactVault(contactsPassword)
+	guard := newAccessGuard(username, password)
+	if db.postgres {
+		vault.store = db
+		guard.store = db
 	}
 	a := &app{
 		db:            db,
@@ -77,12 +88,12 @@ func main() {
 		token:         os.Getenv("CLASH_API_TOKEN"),
 		clanTags:      map[string]string{"1": normalizeTag(os.Getenv("CLAN_TAG1")), "2": normalizeTag(os.Getenv("CLAN_TAG2"))},
 		staticFS:      assets,
-		contactsVault: newContactVault(contactsPassword),
+		contactsVault: vault,
 	}
 	r := chi.NewRouter()
 	r.Use(secureHeaders)
 	r.Use(middleware.RequestID, middleware.Logger, middleware.Recoverer)
-	r.Use(newAccessGuard(username, password).middleware)
+	r.Use(guard.middleware)
 	r.Use(sameOriginAPI)
 	r.Get("/api/health", func(w http.ResponseWriter, _ *http.Request) {
 		jsonResponse(w, http.StatusOK, map[string]string{"status": "ok"})
