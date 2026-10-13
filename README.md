@@ -4,6 +4,8 @@ Painel privado para dois clãs do Clash of Clans, com servidor Go, interface Vue
 
 Para publicar usando a Vercel, siga o [guia de deploy na Vercel](README-VERCEL.md). Ele descreve a entrada web pública, a API interna e o banco PostgreSQL de produção.
 
+Para Oracle Cloud Always Free, siga o [guia de deploy na Oracle Cloud](README-ORACLE.md): uma VM ARM com Docker, HTTPS automático e SQLite persistente.
+
 ## Iniciar com Docker
 
 1. Configure `.env` com `CLASH_API_TOKEN`, `CLAN_TAG1` e `CLAN_TAG2`. Crie o token em [developer.clashofclans.com](https://developer.clashofclans.com/) para o IP público da máquina que acessará a API.

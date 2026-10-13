@@ -1,0 +1,58 @@
+# Standalone production stack; do not merge with docker-compose.yml.
+name: imperio-barbaro-oracle
+services:
+  clanboard:
+    image: imperio-barbaro:${APP_IMAGE_TAG:-local}
+    build: .
+    environment:
+      CLASH_API_TOKEN: ${CLASH_API_TOKEN:?Set CLASH_API_TOKEN}
+      CLAN_TAG1: ${CLAN_TAG1:-}
+      CLAN_TAG2: ${CLAN_TAG2:-}
+      APP_USERNAME: ${APP_USERNAME:?Set APP_USERNAME}
+      APP_PASSWORD: ${APP_PASSWORD:?Set APP_PASSWORD}
+      CONTACTS_PASSWORD: ${CONTACTS_PASSWORD:?Set CONTACTS_PASSWORD}
+      PORT: "2025"
+      DATABASE_PATH: /data/clan.db
+      DATABASE_URL: ""
+    volumes:
+      - clanboard-data:/data
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    mem_limit: 1g
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  caddy:
+    image: caddy:2-alpine
+    environment:
+      DOMAIN: ${DOMAIN:?Set DOMAIN to a public DNS hostname}
+      ACME_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/oracle/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on: [clanboard]
+    restart: unless-stopped
+    mem_limit: 256m
+    security_opt: [no-new-privileges:true]
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  clanboard-data:
+  caddy-data:
+  caddy-config:
