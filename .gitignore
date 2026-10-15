@@ -11,3 +11,16 @@ README-VERCEL.md
 
 /migration-private*.json
 /backups/
+
+# Production settings and credentials; keep documented examples versioned.
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3

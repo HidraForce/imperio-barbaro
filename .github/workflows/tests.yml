@@ -1,5 +1,7 @@
 name: Validar CRM
 on: [push, pull_request]
+permissions:
+  contents: read
 jobs:
   tests:
     runs-on: ubuntu-latest
@@ -18,6 +20,8 @@ jobs:
       TEST_DATABASE_URL: postgres://crm_test:crm_test_disposable@localhost:5432/crm_test?sslmode=disable
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 22
