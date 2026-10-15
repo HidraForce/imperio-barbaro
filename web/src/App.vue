@@ -5,6 +5,7 @@ import { csvCell } from './report-csv.js'
 import UiIcon from './UiIcon.vue'
 import ContactsPanel from './ContactsPanel.vue'
 import PendingMessage from './PendingMessage.vue'
+import LeadershipPanel from './LeadershipPanel.vue'
 import { ownSide, seasonRows, battleCSV, battlePending, raidPending } from './battle-report.js'
 const tab=ref('Overview'), clan=ref(null), war=ref(null),  config=ref({configured:false,clans:[]}), selectedClan=ref('1'), loading=ref(true), error=ref(''), warError=ref(''), raidError=ref('')
 const leagueGroup=ref(null), leagueWar=ref(null), leagueLoading=ref(false), leagueWarLoading=ref(false), leagueError=ref(''), leagueMessage=ref(''), roundMessage=ref(''), roundError=ref(''), selectedRound=ref(1)
@@ -62,8 +63,8 @@ async function loadAllRounds(){
 function chooseRound(number){leagueView.value='round';selectedRound.value=number;loadLeagueRound()}
 watch(tab,value=>{if(['Overview','CWL'].includes(value)&&config.value.configured&&!loading.value&&!leagueGroup.value&&!leagueLoading.value)loadLeague()})
 const raidRecords=ref([]), selectedWeekend=ref(''), raidFilter=ref('all')
-const tabs=['Overview','Raids','CWL','War','Roster','Contacts']
-const tabLabels={Overview:'Visão geral',Raids:'Incursões',CWL:'Liga',War:'Guerra',Roster:'Membros',Contacts:'Contatos'}
+const tabs=['Overview','Raids','CWL','War','Roster','Contacts','Leadership']
+const tabLabels={Overview:'Visão geral',Raids:'Raids',CWL:'Liga',War:'Guerra',Roster:'Membros',Contacts:'Contatos',Leadership:'Liderança'}
 function roleLabel(role){return ({leader:'Líder',coLeader:'Colíder',admin:'Ancião',member:'Membro'})[role]||'Membro'}
 const members=computed(()=>clan.value?.memberList||[]), warMembers=computed(()=>war.value?.clan?.members||[])
 const activeClanTag=computed(()=>config.value.clans?.find(c=>c.id===selectedClan.value)?.tag||'')
@@ -84,7 +85,7 @@ const visibleRaidPlayers=computed(()=>raidPlayers.value.filter(m=>raidFilter.val
 const attackingCount=computed(()=>raidPlayers.value.filter(m=>m.attacks>0).length)
 const onlyPending=ref(false)
 const overviewRaidRecord=computed(()=>raidRecords.value[0]||null)
-const overviewColumns=[{key:'raids',label:'Incursões'},{key:'war',label:'Guerra'},{key:'cwl',label:'CWL'}]
+const overviewColumns=[{key:'raids',label:'Raids'},{key:'war',label:'Guerra'},{key:'cwl',label:'CWL'}]
 const overviewRows=computed(()=>buildAttackOverview({members:members.value,raidRecord:overviewRaidRecord.value,war:war.value,leagueWar:leagueWar.value,leagueMembers:leagueMembers.value,loading:loading.value,leagueLoading:leagueLoading.value||leagueWarLoading.value,warError:warError.value,leagueError:leagueError.value||roundError.value}))
 const visibleOverviewRows=computed(()=>overviewRows.value.filter(row=>!onlyPending.value||row.pendingCount>0))
 const pendingPlayers=computed(()=>overviewRows.value.filter(row=>row.pendingCount>0).length)
@@ -118,20 +119,20 @@ function stars(m){return m.attacks?.reduce((n,a)=>n+a.stars,0)||0}function perce
 function downloadReport(format){
  if(!raidRecord.value)return
  const record=raidRecord.value, season=raid.value
- const title=`${clan.value?.name||'Clã'} · #${activeClanTag.value} · Incursão ${dateLabel(season.startTime)} – ${dateLabel(season.endTime)}`
- const basis=`Lista de membros registrada em ${new Date(record.rosterCapturedAt).toLocaleString('pt-BR')} (${record.rosterDuringRaid?'durante esta incursão':'após esta incursão; a composição histórica do clã não foi confirmada'}).`
- const status=raidEnded.value?'Fim de semana concluído':'PROVISÓRIO — incursão ainda em andamento'
+ const title=`${clan.value?.name||'Clã'} · #${activeClanTag.value} · Raid ${dateLabel(season.startTime)} – ${dateLabel(season.endTime)}`
+ const basis=`Lista de membros registrada em ${new Date(record.rosterCapturedAt).toLocaleString('pt-BR')} (${record.rosterDuringRaid?'durante esta raid':'após esta raid; a composição histórica do clã não foi confirmada'}).`
+ const status=raidEnded.value?'Fim de semana concluído':'PROVISÓRIO — raid ainda em andamento'
  const note='Sem ataques registrados neste clã. A lista pode não incluir membros que entraram ou saíram entre sincronizações; confira a participação e a elegibilidade antes de tomar medidas.'
  let content
  if(format==='csv'){
-  const rows=[['Relatório semanal de incursões',title],['Situação',status],['Referência da lista de membros',basis],['Última consulta de incursões',record.syncedAt],['Observação',note],[],['Jogador','Tag','Ataques','Situação','Lista registrada']]
+  const rows=[['Relatório semanal de raids',title],['Situação',status],['Referência da lista de membros',basis],['Última consulta de raids',record.syncedAt],['Observação',note],[],['Jogador','Tag','Ataques','Situação','Lista registrada']]
   for(const m of raidPlayers.value)rows.push([m.name,m.tag,m.attacks,raidStatus(m),m.inRoster?'Incluído':'Fora da lista registrada'])
   content='\uFEFF'+rows.map(row=>row.map(csvCell).join(',')).join('\r\n')
  }else{
-  content=[title,status,basis,`Última consulta de incursões: ${new Date(record.syncedAt).toLocaleString('pt-BR')}`,note,'',`MEMBROS SEM ATAQUES REGISTRADOS (${nonAttackers.value.length})`,...nonAttackers.value.map(m=>`• ${m.name} (${m.tag})`),...(nonAttackers.value.length?[]:['Nenhum.']), '',`ATACANTES (${attackingCount.value})`,...raidPlayers.value.filter(m=>m.attacks>0).map(m=>`${m.name} (${m.tag}) — ${m.attacks} ataques, ${number(m.capitalResourcesLooted)} ouro da capital`)].join('\n')
+  content=[title,status,basis,`Última consulta de raids: ${new Date(record.syncedAt).toLocaleString('pt-BR')}`,note,'',`MEMBROS SEM ATAQUES REGISTRADOS (${nonAttackers.value.length})`,...nonAttackers.value.map(m=>`• ${m.name} (${m.tag})`),...(nonAttackers.value.length?[]:['Nenhum.']), '',`ATACANTES (${attackingCount.value})`,...raidPlayers.value.filter(m=>m.attacks>0).map(m=>`${m.name} (${m.tag}) — ${m.attacks} ataques, ${number(m.capitalResourcesLooted)} ouro da capital`)].join('\n')
  }
  const url=URL.createObjectURL(new Blob([content],{type:format==='csv'?'text/csv;charset=utf-8':'text/plain;charset=utf-8'}))
- const link=document.createElement('a');link.href=url;link.download=`incursoes-${activeClanTag.value}-${season.startTime.slice(0,8)}.${format}`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000)
+ const link=document.createElement('a');link.href=url;link.download=`raids-${activeClanTag.value}-${season.startTime.slice(0,8)}.${format}`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000)
 }
 function downloadBattle(type){
  const isLeague=type==='CWL'
@@ -140,7 +141,7 @@ function downloadBattle(type){
  const url=URL.createObjectURL(new Blob([content],{type:'text/csv;charset=utf-8'}))
  const link=document.createElement('a');link.href=url;link.download=`${isLeague?'cwl':'guerra'}-${activeClanTag.value}-${isLeague?(leagueGroup.value?.season||'')+'-'+(leagueView.value==='all'?'todos':'rodada-'+selectedRound.value):'atual'}.csv`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000)
 }
-const messageContext=computed(()=>tab.value==='Raids'?'Incursões selecionadas':tab.value==='War'?'Guerra atual':tab.value==='CWL'?(leagueView.value==='all'?'CWL · temporada completa':'CWL · rodada '+selectedRound.value):'Incursões recentes, guerra atual e CWL · rodada '+selectedRound.value)
+const messageContext=computed(()=>tab.value==='Raids'?'Raids selecionadas':tab.value==='War'?'Guerra atual':tab.value==='CWL'?(leagueView.value==='all'?'CWL · temporada completa':'CWL · rodada '+selectedRound.value):'Raids recentes, guerra atual e CWL · rodada '+selectedRound.value)
 const messageBusy=computed(()=>loading.value||(['Overview','CWL'].includes(tab.value)&&(leagueLoading.value||leagueWarLoading.value||(leagueView.value==='all'&&allRoundsLoading.value))))
 const messageItems=computed(()=>{
  const items=[]
@@ -158,26 +159,26 @@ onMounted(load)
 <div class="shell">
   <aside class="sidebar"><div class="brand"><span class="brand-icon"><UiIcon name="Shield"/></span> IMPÉRIO<span class="light"> BÁRBARO CRM</span></div><div class="label">SEU CLÃ</div><div class="clan"><span class="crest"><UiIcon name="War"/></span><span><b>{{ clan?.name||'Painel do clã' }}</b><small>{{ activeClanTag?'#'+activeClanTag:'Selecione um clã configurado' }}</small></span><i class="dot"></i></div><div class="label nav-label">GESTÃO</div><button v-for="item in tabs" :key="item" class="nav" :class="{active:tab===item}" @click="tab=item"><UiIcon :name="item"/>{{ tabLabels[item] }}</button><div class="sidebar-foot"><i class="dot"></i> Conexão com a API <b>{{ config.configured?'Configurada':'Configuração necessária' }}</b><button @click="load">↻ &nbsp;Atualizar dados</button></div></aside>
   <main><header><span>GESTÃO DO CLÃ <span class="header-section">&nbsp; / &nbsp; <b>{{ tabLabels[tab].toUpperCase() }}</b></span></span><span class="live"><i class="dot"></i> DADOS DO CLÃ</span></header><div class="content">
-    <div class="heading"><div><small>PAINEL DO CLÃ</small><h1>{{ tab==='Overview'?'Controle de ataques':tab==='CWL'?'Liga de Guerra de Clãs':tabLabels[tab] }}</h1><p>{{ clan?.name?clan.name+' · #'+activeClanTag:'Acompanhe seu clã em um só lugar.' }}</p></div><div class="heading-actions"><div class="clan-switch" v-if="config.clans?.some(c=>c.configured)"><button v-for="c in config.clans" :key="c.id" :disabled="!c.configured||loading" :class="{selected:selectedClan===c.id}" @click="chooseClan(c.id)">Clã {{ c.id }}</button></div><button class="primary" :disabled="loading" @click="load">↻ &nbsp;Sincronizar</button></div></div>
-    <p v-if="!['Overview','Contacts'].includes(tab)" class="report-note">Cache compartilhado: clã por 5 minutos, guerras e liga por 1 minuto e incursões por 15 minutos. Sincronizar reutiliza os dados dentro desse prazo.</p>
-    <div v-if="error" class="notice error">{{ error }} <button @click="error=''">×</button></div><div v-if="!config.configured" class="notice">⌁ &nbsp; Configure <code>CLASH_API_TOKEN</code>, <code>CLAN_TAG1</code> e <code>CLAN_TAG2</code> no .env e reinicie o aplicativo.</div><p v-if="loading" class="loading">Carregando dados do clã…</p>
+    <div class="heading"><div><small>PAINEL DO CLÃ</small><h1>{{ tab==='Overview'?'Controle de ataques':tab==='CWL'?'Liga de Guerra de Clãs':tabLabels[tab] }}</h1><p>{{ clan?.name?clan.name+' · #'+activeClanTag:'Acompanhe seu clã em um só lugar.' }}</p></div><div class="heading-actions" v-if="tab!=='Leadership'"><div class="clan-switch" v-if="config.clans?.some(c=>c.configured)"><button v-for="c in config.clans" :key="c.id" :disabled="!c.configured||loading" :class="{selected:selectedClan===c.id}" @click="chooseClan(c.id)">Clã {{ c.id }}</button></div><button class="primary" :disabled="loading" @click="load">↻ &nbsp;Sincronizar</button></div></div>
+    <p v-if="!['Overview','Contacts','Leadership'].includes(tab)" class="report-note">Cache compartilhado: clã por 5 minutos, guerras e liga por 1 minuto e raids por 15 minutos. Sincronizar reutiliza os dados dentro desse prazo.</p>
+    <div v-if="error" class="notice error">{{ error }} <button @click="error=''">×</button></div><div v-if="!config.configured&&tab!=='Leadership'" class="notice">⌁ &nbsp; Configure <code>CLASH_API_TOKEN</code>, <code>CLAN_TAG1</code> e <code>CLAN_TAG2</code> no .env e reinicie o aplicativo.</div><p v-if="loading" class="loading">Carregando dados do clã…</p>
     <template v-if="tab==='Overview'">
       <div class="attack-toolbar">
         <div><h2>Quem precisa atacar <em>{{ pendingPlayers }} jogadores</em></h2><p>Pendências primeiro. Verde: todos os ataques usados. Vermelho: faltam ataques. Cinza: sem obrigação confirmada ou sem dados.</p></div>
         <label class="pending-toggle"><input type="checkbox" v-model="onlyPending"> Só pendências</label>
       </div>
       <div class="attack-context">
-        <span><b>Incursões</b> {{ overviewRaidRecord ? dateLabel(overviewRaidRecord.season.startTime) : 'Sem fim de semana disponível' }}</span>
+        <span><b>Raids</b> {{ overviewRaidRecord ? dateLabel(overviewRaidRecord.season.startTime) : 'Sem fim de semana disponível' }}</span>
         <span><b>Guerra</b> {{ warState }}</span>
         <label><b>CWL</b><select v-if="leagueGroup?.rounds?.length" v-model="selectedRound" :disabled="leagueLoading||leagueWarLoading||loading" @change="loadLeagueRound"><option v-for="(_,index) in leagueGroup.rounds" :key="index" :value="index+1">Rodada {{ index+1 }}</option></select><span v-else>{{ leagueLoading?'Carregando…':'Sem liga atual' }}</span></label>
       </div>
       <div v-if="warError" class="notice error">Guerra: {{ warError }}</div>
-      <div v-if="raidError" class="notice error">Incursões: {{ raidError }} <span v-if="overviewRaidRecord">Exibindo registros salvos.</span></div>
+      <div v-if="raidError" class="notice error">Raids: {{ raidError }} <span v-if="overviewRaidRecord">Exibindo registros salvos.</span></div>
       <div v-if="leagueError||roundError" class="notice error">CWL: {{ leagueError||roundError }}</div>
       <p v-if="roundMessage||leagueMessage" class="loading">{{ roundMessage||leagueMessage }}</p>
       <section class="table-wrap attack-table-wrap">
         <table class="attack-table">
-          <caption class="sr-only">Ataques por jogador nas incursões mais recentes, na guerra atual e na rodada selecionada da CWL</caption>
+          <caption class="sr-only">Ataques por jogador nas raids mais recentes, na guerra atual e na rodada selecionada da CWL</caption>
           <thead><tr><th scope="col">JOGADOR</th><th v-for="column in overviewColumns" :key="column.key" :class="'activity-'+column.key" scope="col">{{ column.label }}</th></tr></thead>
           <tbody>
             <tr v-for="player in visibleOverviewRows" :key="player.tag" :class="{'has-pending':player.pendingCount>0}">
@@ -188,20 +189,20 @@ onMounted(load)
           </tbody>
         </table>
       </section>
-      <p v-if="overviewRaidRecord" class="report-note">Incursões: lista registrada em {{ new Date(overviewRaidRecord.rosterCapturedAt).toLocaleString('pt-BR') }}{{ overviewRaidRecord.rosterDuringRaid?' durante o fim de semana.':' após o fim de semana; confira a composição histórica do clã.' }} Última consulta em {{ new Date(overviewRaidRecord.syncedAt).toLocaleString('pt-BR') }}.</p>
+      <p v-if="overviewRaidRecord" class="report-note">Raids: lista registrada em {{ new Date(overviewRaidRecord.rosterCapturedAt).toLocaleString('pt-BR') }}{{ overviewRaidRecord.rosterDuringRaid?' durante o fim de semana.':' após o fim de semana; confira a composição histórica do clã.' }} Última consulta em {{ new Date(overviewRaidRecord.syncedAt).toLocaleString('pt-BR') }}.</p>
     </template>
     <template v-else-if="tab==='Raids'">
-      <div class="raid-banner"><span class="raid-emblem"><UiIcon name="Raids"/></span><div><small>CAPITAL DO CLÃ</small><h2>Incursões da capital</h2><p>Cada ataque conta. Mantenha os registros do seu reino.</p></div></div>
+      <div class="raid-banner"><span class="raid-emblem"><UiIcon name="Raids"/></span><div><small>CAPITAL DO CLÃ</small><h2>Raids da capital</h2><p>Cada ataque conta. Mantenha os registros do seu reino.</p></div></div>
       <div v-if="raidError" class="notice error">{{ raidError }} <span v-if="raidRecords.length">Exibindo registros salvos.</span></div>
-      <div class="raid-controls"><label>Fim de semana de incursões<select v-model="selectedWeekend" :disabled="loading"><option v-if="!raidRecords.length" value="">Nenhum fim de semana disponível</option><option v-for="r in raidRecords" :key="r.season.startTime" :value="r.season.startTime">{{ dateLabel(r.season.startTime) }} – {{ dateLabel(r.season.endTime) }}</option></select></label><span class="badge" v-if="raid">{{ raidEnded?'CONCLUÍDO':'EM ANDAMENTO · PROVISÓRIO' }}</span><div class="report-actions"><button class="primary" :disabled="!raid||loading" @click="downloadReport('txt')">↓ Relatório semanal</button><button class="secondary" :disabled="!raid||loading" @click="downloadReport('csv')">↓ CSV</button></div></div>
+      <div class="raid-controls"><label>Fim de semana de raids<select v-model="selectedWeekend" :disabled="loading"><option v-if="!raidRecords.length" value="">Nenhum fim de semana disponível</option><option v-for="r in raidRecords" :key="r.season.startTime" :value="r.season.startTime">{{ dateLabel(r.season.startTime) }} – {{ dateLabel(r.season.endTime) }}</option></select></label><span class="badge" v-if="raid">{{ raidEnded?'CONCLUÍDO':'EM ANDAMENTO · PROVISÓRIO' }}</span><div class="report-actions"><button class="primary" :disabled="!raid||loading" @click="downloadReport('txt')">↓ Relatório semanal</button><button class="secondary" :disabled="!raid||loading" @click="downloadReport('csv')">↓ CSV</button></div></div>
       <template v-if="raid">
-        <section class="stats"><article><small>ATACANTES</small><strong>{{ attackingCount }}<em> jogadores</em></strong><span>Inclui atacantes fora da lista registrada</span></article><article><small>{{ raidEnded?'SEM ATAQUES REGISTRADOS':'AINDA NÃO ATACOU' }}</small><strong class="missing-count">{{ nonAttackers.length }}</strong><span>Membros da lista registrada</span></article><article><small>TOTAL DE ATAQUES</small><strong>{{ number(raid.totalAttacks) }}</strong><span>{{ number(raid.enemyDistrictsDestroyed) }} distritos destruídos</span></article><article><small>OURO DA CAPITAL</small><strong>{{ number(raid.capitalTotalLoot) }}</strong><span>{{ number(raid.raidsCompleted) }} incursões concluídas</span></article></section>
+        <section class="stats"><article><small>ATACANTES</small><strong>{{ attackingCount }}<em> jogadores</em></strong><span>Inclui atacantes fora da lista registrada</span></article><article><small>{{ raidEnded?'SEM ATAQUES REGISTRADOS':'AINDA NÃO ATACOU' }}</small><strong class="missing-count">{{ nonAttackers.length }}</strong><span>Membros da lista registrada</span></article><article><small>TOTAL DE ATAQUES</small><strong>{{ number(raid.totalAttacks) }}</strong><span>{{ number(raid.enemyDistrictsDestroyed) }} distritos destruídos</span></article><article><small>OURO DA CAPITAL</small><strong>{{ number(raid.capitalTotalLoot) }}</strong><span>{{ number(raid.raidsCompleted) }} raids concluídas</span></article></section>
         <div class="section"><div><small>CHAMADA SEMANAL</small><h2>{{ raidEnded?'Membros sem ataques registrados':'Ainda precisam atacar' }} <em>{{ nonAttackers.length }}</em></h2></div></div>
         <section class="missing-panel"><div class="member-chips"><span v-for="m in nonAttackers" :key="m.tag">{{ m.name }} <small>{{ m.tag }}</small></span><p v-if="!nonAttackers.length">Todos os membros da lista registrada têm ataques registrados.</p></div><p class="report-note">Lista de membros registrada em {{ new Date(raidRecord.rosterCapturedAt).toLocaleString('pt-BR') }}. {{ raidRecord.rosterDuringRaid?'Registrada durante este fim de semana. Mudanças entre sincronizações podem não constar.':'Registrada após este fim de semana. A composição histórica do clã não foi confirmada.' }} A ausência de ataques registrados neste clã não comprova a elegibilidade do jogador nem a participação em outro clã.</p><p v-if="!raidEnded" class="report-note">Este fim de semana ainda está em andamento. O relatório é provisório.</p><small class="sync-note">Última consulta à API: {{ new Date(raidRecord.syncedAt).toLocaleString('pt-BR') }}</small></section>
-        <div class="section"><div><small>PARTICIPAÇÃO NAS INCURSÕES</small><h2>Registro de ataques</h2></div><select v-model="raidFilter" aria-label="Filtrar participação"><option value="all">Todos os jogadores</option><option value="missing">Sem ataques</option><option value="attacked">Atacou</option></select></div>
+        <div class="section"><div><small>PARTICIPAÇÃO NAS RAIDS</small><h2>Registro de ataques</h2></div><select v-model="raidFilter" aria-label="Filtrar participação"><option value="all">Todos os jogadores</option><option value="missing">Sem ataques</option><option value="attacked">Atacou</option></select></div>
         <section class="table-wrap"><table><thead><tr><th>JOGADOR</th><th>ATAQUES USADOS</th><th>OURO DA CAPITAL</th><th>SITUAÇÃO</th></tr></thead><tbody><tr v-for="m in visibleRaidPlayers" :key="m.tag"><td><b>{{ m.name }}</b><small>{{ m.tag }}{{ m.inRoster?'':' · Fora da lista registrada' }}</small></td><td>{{ m.attacks }}<span v-if="allowance(m)!=null"> / {{ allowance(m) }}</span></td><td>{{ number(m.capitalResourcesLooted) }}</td><td><span class="participation" :class="{missing:!m.attacks}">{{ raidStatus(m) }}</span></td></tr><tr v-if="!visibleRaidPlayers.length"><td colspan="4" class="empty">Nenhum jogador corresponde a este filtro.</td></tr></tbody></table></section>
       </template>
-      <section v-else-if="!loading" class="missing-panel empty">{{ raidError?'Dados de incursões indisponíveis. Corrija o problema da API e sincronize novamente.':'Nenhum fim de semana de incursões disponível para este clã.' }}</section>
+      <section v-else-if="!loading" class="missing-panel empty">{{ raidError?'Dados de raids indisponíveis. Corrija o problema da API e sincronize novamente.':'Nenhum fim de semana de raids disponível para este clã.' }}</section>
     </template>
     <template v-else-if="tab==='CWL'">
       <div class="raid-banner"><span class="raid-emblem"><UiIcon name="CWL"/></span><div><small>LIGA DE GUERRA</small><h2>Liga de Guerra de Clãs</h2><p>O grupo da liga e as escalações diárias do seu clã.</p></div></div>
@@ -234,8 +235,9 @@ onMounted(load)
     </template>
     <template v-else-if="tab==='War'"><div v-if="warError" class="notice">{{ warError }}</div><div class="stats three"><article><small>SUAS ESTRELAS</small><strong>{{ war?.clan?.stars??'—' }}</strong><span>{{ war?.clan?.attacks||0 }} ataques usados</span></article><article><small>ESTRELAS DO ADVERSÁRIO</small><strong>{{ war?.opponent?.stars??'—' }}</strong><span>{{ war?.opponent?.attacks||0 }} ataques usados</span></article><article><small>SITUAÇÃO DA GUERRA</small><strong class="small-strong">{{ warState }}</strong><span>{{ war?.teamSize||0 }} participantes</span></article></div><div class="section"><div><small>ACOMPANHAMENTO DE ATAQUES</small><h2>Ataques de guerra</h2></div><button class="secondary" :disabled="loading||!!warError||!warMembers.length" @click="downloadBattle('Guerra')">↓ Exportar CSV</button></div><section class="table-wrap"><table><thead><tr><th>JOGADOR</th><th>ATAQUES</th><th>ESTRELAS</th><th>DESTRUIÇÃO</th><th>ALVO</th></tr></thead><tbody><tr v-for="m in warMembers" :key="m.tag"><td><b>{{ m.name }}</b><small>{{ m.tag }}</small></td><td>{{ m.attacks?.length||0 }} / {{ war?.attacksPerMember||2 }}</td><td class="stars">{{ '★'.repeat(stars(m)) }}</td><td>{{ percent(m) }}%</td><td>{{ m.attacks?.map(a=>a.defenderTag).join(', ')||'Não atacou' }}</td></tr><tr v-if="!warMembers.length"><td class="empty" colspan="5">Nenhum ataque de guerra ativo para exibir.</td></tr></tbody></table></section></template>
     <template v-else-if="tab==='Roster'"><div class="section"><div><small>TODOS OS MEMBROS</small><h2>Membros do clã <em>{{ members.length }}</em></h2></div></div><section class="table-wrap"><table><thead><tr><th>JOGADOR</th><th>CARGO</th><th>NÍVEL</th><th>TROFÉUS</th><th>DOAÇÕES</th><th>ESTRELAS DE GUERRA</th></tr></thead><tbody><tr v-for="m in members" :key="m.tag"><td><b>{{ m.name }}</b><small>{{ m.tag }}</small></td><td>{{ roleLabel(m.role) }}</td><td>{{ m.expLevel }}</td><td>🏆 {{ m.trophies }}</td><td>{{ m.donations }}</td><td>{{ m.warStars }}</td></tr><tr v-if="!members.length"><td colspan="6" class="empty">Os membros aparecerão aqui quando a API estiver conectada.</td></tr></tbody></table></section></template>
-    <template v-else><ContactsPanel :configured="config.contactsConfigured" :loading="loading" :clans="config.clans"/></template>
-    <PendingMessage v-if="['Overview','Raids','CWL','War'].includes(tab)" :clan-name="clan?.name||('Clã '+selectedClan)" :clan-tag="activeClanTag" :items="messageItems" :busy="messageBusy" :context="messageContext"/>
+    <template v-else-if="tab==='Contacts'"><ContactsPanel :configured="config.contactsConfigured" :loading="loading" :clans="config.clans"/></template>
+    <KeepAlive><LeadershipPanel v-if="tab==='Leadership'"/></KeepAlive>
+    <PendingMessage :war-mode="tab==='War'" v-if="['Overview','Raids','CWL','War'].includes(tab)" :clan-name="clan?.name||('Clã '+selectedClan)" :clan-tag="activeClanTag" :items="messageItems" :busy="messageBusy" :context="messageContext"/>
     <footer>IMPÉRIO BÁRBARO CRM &nbsp;·&nbsp; CONTROLE DE ATAQUES &nbsp;·&nbsp; {{ new Date().getFullYear() }}</footer>
   </div></main><nav class="mobile-nav"><button v-for="item in tabs" :key="item" :class="{active:tab===item}" @click="tab=item"><UiIcon :name="item"/><small>{{ tabLabels[item] }}</small></button></nav>
 </div>

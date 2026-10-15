@@ -32,7 +32,7 @@ O arquivo `.env` é privado e excluído do Git.
 
 ## Segurança
 
-- Autenticação obrigatória para a página, os arquivos e todas as rotas da API, com comparação das credenciais em tempo constante.
+- Autenticação obrigatória para o painel, seus arquivos e todas as rotas da API, com comparação das credenciais em tempo constante.
 - Senhas de exemplo e senhas com menos de 16 caracteres impedem a inicialização.
 - Após dez tentativas inválidas em cinco minutos, novas tentativas daquele endereço são bloqueadas até o fim da janela. A resposta inclui `Retry-After`. O contador tem limite de memória.
 - Gravações exigem `X-Clanboard-Request: 1`; cadastros aceitam somente JSON. Requisições de outros sites e subdomínios são rejeitadas. Não há permissões CORS.
@@ -75,27 +75,27 @@ Todas as consultas externas passam por um cache compartilhado entre usuários: e
 | Perfil e membros do clã | 5 minutos |
 | Guerra atual | 1 minuto |
 | Grupo e guerras da Liga de Guerra de Clãs | 1 minuto |
-| Fins de semana de incursões | 15 minutos |
+| Fins de semana de raids | 15 minutos |
 | Erros da API | 30 segundos |
 
 Consultas simultâneas ao mesmo recurso compartilham uma única chamada externa. **Sincronizar** e **Atualizar dados** reutilizam o cache enquanto estiver válido. Após a expiração, a próxima consulta busca dados novos. Não há atualização automática em segundo plano.
 
 Uma resposta HTTP 429 pausa novas chamadas para toda a API, respeitando `Retry-After` em segundos ou como data HTTP; na ausência de um valor válido, a pausa dura um minuto. Durante a pausa, entradas válidas continuam disponíveis. Erros não substituem dados por um sucesso aparente, e dados expirados não são apresentados como atuais.
 
-O cache mantém até 128 entradas e limita cada resposta externa a 8 MiB. No modo SQLite, reiniciar o servidor limpa o cache. No modo PostgreSQL, ele permanece disponível para as outras instâncias, respeitando a expiração. Os contatos e o histórico de incursões ficam persistidos no banco configurado. Respostas privadas não são armazenadas no cache HTTP do navegador.
+O cache mantém até 128 entradas e limita cada resposta externa a 8 MiB. No modo SQLite, reiniciar o servidor limpa o cache. No modo PostgreSQL, ele permanece disponível para as outras instâncias, respeitando a expiração. Os contatos e o histórico de raids ficam persistidos no banco configurado. Respostas privadas não são armazenadas no cache HTTP do navegador.
 
 ## Página inicial
 
-A **Visão geral** mostra uma tabela por jogador com as colunas **Incursões**, **Guerra** e **CWL**. Jogadores com pendências aparecem primeiro; **Só pendências** filtra a lista. Verde indica todos os ataques usados, vermelho indica ataques restantes ou não realizados após o encerramento, e cinza indica preparação, ausência de escalação ou dados indisponíveis. Ataques parciais continuam pendentes, incluindo ataques bônus nas incursões.
+A **Visão geral** mostra uma tabela por jogador com as colunas **Raids**, **Guerra** e **CWL**. Jogadores com pendências aparecem primeiro; **Só pendências** filtra a lista. Verde indica todos os ataques usados, vermelho indica ataques restantes ou não realizados após o encerramento, e cinza indica preparação, ausência de escalação ou dados indisponíveis. Ataques parciais continuam pendentes, incluindo ataques bônus nas raids.
 
-A tabela usa o fim de semana de incursões mais recente, a guerra atual e a rodada selecionada da liga. Apenas os jogadores escalados contam para guerra e CWL. Membros da lista histórica continuam visíveis mesmo após saírem do clã.
+A tabela usa o fim de semana de raids mais recente, a guerra atual e a rodada selecionada da liga. Apenas os jogadores escalados contam para guerra e CWL. Membros da lista histórica continuam visíveis mesmo após saírem do clã.
 
 ## Funcionalidades
 
 - Perfil e lista de membros de cada clã configurado.
 - Guerra atual: placar, ataques, estrelas e destruição.
 - Liga de Guerra de Clãs: grupo, rodadas e escalações diárias.
-- Incursões da capital: ataques, ouro e membros sem ataques registrados.
+- Raids da capital: ataques, ouro e membros sem ataques registrados.
 - Relatórios semanais em texto e CSV, em português.
 - Contatos privados dos líderes e links para WhatsApp.
 - Interface responsiva e PWA instalável.
@@ -110,15 +110,15 @@ Use **Editar pessoa e contas** para adicionar contas ou atualizar seu clã. **Re
 
 Na primeira inicialização após a atualização, o banco migra os contatos existentes, preservando nomes, tags, telefones e observações. Cada registro antigo começa como uma pessoa com uma conta; o clã fica como **não informado** até ser preenchido. A cópia e a remoção da tabela antiga acontecem na mesma transação. Tags antigas que se tornem duplicadas após a normalização interrompem a migração sem excluir os dados.
 
-## Relatórios de incursões
+## Relatórios de raids
 
-Abra **Incursões**, selecione o fim de semana e baixe **Relatório semanal** ou **CSV**. Fins de semana ativos geram relatórios provisórios. Sincronize após o encerramento e a expiração do cache para obter os totais finais.
+Abra **Raids**, selecione o fim de semana e baixe **Relatório semanal** ou **CSV**. Fins de semana ativos geram relatórios provisórios. Sincronize após o encerramento e a expiração do cache para obter os totais finais.
 
 A consulta `/clans/{clanTag}/capitalraidseasons` retorna os dez fins de semana mais recentes. O aplicativo salva os registros por clã e exibe até 52 fins de semana. Abrir o painel ou sincronizar dispara a leitura, respeitando o cache; não há coleta agendada.
 
 A lista de membros é registrada uma única vez por fim de semana, na primeira sincronização. Se um fim de semana antigo for consultado pela primeira vez após o término, a lista representa os membros disponíveis nessa consulta, e não uma composição histórica confirmada. Mudanças entre sincronizações, elegibilidade e ataques em outros clãs não são comprovados pelo relatório.
 
-As datas da lista de membros e da última consulta de incursões refletem a obtenção dos dados da API; ler o cache não altera essas datas para aparentar uma nova consulta.
+As datas da lista de membros e da última consulta de raids refletem a obtenção dos dados da API; ler o cache não altera essas datas para aparentar uma nova consulta.
 
 ## Liga de Guerra de Clãs
 
@@ -132,9 +132,9 @@ O servidor consulta `/clans/{clanTag}/currentwar/leaguegroup` e resolve as batal
 
 ## Mensagens de inadimplência para WhatsApp
 
-O gerador aparece em **Visão geral**, **Incursões**, **Guerra** e **Liga** e usa somente o clã selecionado. Na visão geral, combina as incursões mais recentes, a guerra atual e a rodada selecionada da CWL. Nas demais abas, usa o recorte exibido; **Todos** na liga considera a temporada inteira. Escolha todos com pendências ou uma conta específica e use **Copiar mensagem para WhatsApp** para colar o texto na conversa desejada.
+O gerador aparece em **Visão geral**, **Raids**, **Guerra** e **Liga** e usa somente o clã selecionado. Na visão geral, combina as raids mais recentes, a guerra atual e a rodada selecionada da CWL. Nas demais abas, usa o recorte exibido; **Todos** na liga considera a temporada inteira. Escolha todos com pendências ou uma conta específica e use **Copiar mensagem para WhatsApp** para colar o texto na conversa desejada.
 
-Atividades encerradas com ataques restantes pedem justificativa à liderança e informam que, sem justificativa, o jogador ficará sob aviso. Atividades em andamento recebem um lembrete para atacar dentro do prazo; preparação, reservas e dados indisponíveis não geram cobrança. Nas incursões, o texto solicita conferência da elegibilidade e participação em outros clãs quando os registros não confirmam esses dados. Ataques parciais e bônus pendentes são incluídos quando o limite é conhecido.
+Atividades encerradas com ataques restantes pedem justificativa à liderança e informam que, sem justificativa, o jogador ficará sob aviso. Atividades em andamento recebem um lembrete para atacar dentro do prazo; preparação, reservas e dados indisponíveis não geram cobrança. Nas raids, o texto solicita conferência da elegibilidade e participação em outros clãs quando os registros não confirmam esses dados. Ataques parciais e bônus pendentes são incluídos quando o limite é conhecido.
 
 As mensagens são geradas no navegador, sem envio automático, acesso aos contatos privados ou registro de punições. A seleção individual identifica a conta pela tag; contas da mesma pessoa não são reunidas por suposição.
 
@@ -143,3 +143,27 @@ As mensagens são geradas no navegador, sem envio automático, acesso aos contat
 Compile a interface com `cd web`, `npm install` e `npm run build`. Na raiz, exporte as variáveis do `.env` e execute `go run .`. O Docker Compose é o caminho recomendado.
 
 Para validar o projeto, execute `npm test` e `npm run build` em `web/` e `go test -race ./...` na raiz. Para verificar as proteções e a validação dos contatos sem as dependências externas do servidor, execute `go test -race database.go database_test.go shared_security.go security.go contact_validation.go contacts_security.go contacts_store.go security_test.go contacts_security_test.go contact_accounts_test.go`. Os testes de cache verificam consultas simultâneas, isolamento dos clãs, expiração, cancelamento, respostas inválidas e pausa após o limite da API.
+
+## Domínio público e painel privado
+
+`imperiobarbaro.com.br` (e `www.imperiobarbaro.com.br`, se configurado no proxy) serve a página inicial pública. O botão **Acessar painel** abre `https://dashboard.imperiobarbaro.com.br/`, com o mesmo usuário e senha existentes e a mesma proteção adicional dos contatos. O navegador pode pedir as credenciais novamente no novo subdomínio.
+
+A separação pelo Host funciona no servidor Go e no gateway Vercel. No domínio principal, somente `/`, `/home.css`, `/icon.svg`, `/sw.js`, as duas variantes `imperio-hero-768.webp` e `imperio-hero-1536.webp` e os regulamentos `regras-principal.pdf` e `regras-secundario.pdf` são públicos; API e arquivos do painel retornam 404. Outros hosts, incluindo localhost, continuam autenticados. O site público não consulta dados privados. Os nomes de domínio estão explícitos em `home.go`, `web/gateway.mjs` e nos links de `web/public/home.html`; alterações futuras de domínio devem atualizar os três.
+
+Para ativar, aponte o DNS dos dois hosts para a hospedagem atual e configure ambos nela. Na Oracle, use `DOMAIN=imperiobarbaro.com.br` e `DASHBOARD_DOMAIN=dashboard.imperiobarbaro.com.br` em `.env.oracle`, depois reconstrua e recrie os serviços. Na Vercel, associe os dois domínios ao mesmo projeto existente e mantenha o binding interno `API_URL`. Não altere senhas nem habilite CORS entre os subdomínios. Para usar `www`, adicione também esse host ao DNS e à lista de hosts do Caddy/provedor.
+
+Verificação: o domínio principal deve retornar 200 sem login; o painel e `/api/health` no subdomínio devem retornar 401 sem credenciais e 200 com as credenciais existentes. `/api/contacts` no domínio principal deve retornar 404. O build copia a página inicial de `web/public` para `web/dist`.
+
+
+A página pública inclui links oficiais fornecidos pela comunidade (Instagram e canal WhatsApp), regras do grupo geral, regulamentos separados dos dois clãs e o guia de liderança. Os regulamentos originais estão disponíveis para download. A arte é servida em WebP responsivo; o prompt e os detalhes dos arquivos estão em `docs/homepage-artwork.md`. As regras funcionam sem JavaScript; o guia de liderança carrega seus dados públicos com JavaScript. A página não carrega dados privados nem incorpora rastreadores das redes sociais.
+
+
+## Editar a liderança e compartilhar regras
+
+No painel autenticado, abra **Liderança** para editar nomes, cargos e responsabilidades de ambos os clãs, adicionar/remover posições e mudar sua ordem. Deixe o nome vazio para publicar **Vaga aberta**. Clique **Salvar liderança pública** para publicar as mudanças. Rascunhos permanecem ao trocar de aba; alterações concorrentes são recusadas para evitar sobrescrever outra sessão. A lista fica persistida no mesmo SQLite/PostgreSQL do aplicativo e não é redefinida ao reiniciar.
+
+A página inicial busca somente a lista pública em `GET /public/leadership`; erros exibem uma opção de tentar novamente, sem mostrar nomes antigos. Edições usam `GET/PUT /api/leadership`, com autenticação e proteção de origem existentes. O novo `home.js` é um arquivo público permitido. O endpoint público não aceita gravação nem retorna contatos privados. JavaScript é necessário para carregar os responsáveis atuais e copiar links; as regras permanecem legíveis sem JavaScript.
+
+Links permanentes: `https://imperiobarbaro.com.br/#regras-gerais`, `/#regras-principal` e `/#regras-secundario`. Cada tópico também tem um link e botão **Copiar link**; por exemplo, `/#regras-principal-guerras` e `/#regras-secundario-raids`. Links para tópicos abrem automaticamente o bloco correspondente.
+
+Na aba **Guerra**, o gerador permite selecionar **0 ataques**, **1 ataque e ainda com pendência** ou todos os pendentes. É possível copiar o aviso coletivo ou de um jogador. Guerras abertas geram lembretes; guerras encerradas solicitam justificativa. Jogadores que já cumpriram seu limite não recebem cobrança. Nenhuma mensagem é enviada automaticamente.

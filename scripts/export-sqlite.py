@@ -33,4 +33,4 @@ export = dict(version=1, contacts=contacts, raids=raids)
 fd = os.open(args.output, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
 with os.fdopen(fd, 'w', encoding='utf-8') as output:
     json.dump(export, output, ensure_ascii=False)
-print(f'Exportação privada concluída: {len(contacts)} contatos e {len(raids)} incursões. O original foi preservado.')
+print(f'Exportação privada concluída: {len(contacts)} contatos e {len(raids)} raids. O original foi preservado.')

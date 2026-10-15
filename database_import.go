@@ -75,10 +75,10 @@ func importSQLiteExport(ctx context.Context, db *database, path string) error {
 	}
 	for _, raid := range data.Raids {
 		if raid.ClanTag == "" || raid.StartTime == "" || !json.Valid(raid.Season) || !json.Valid(raid.Roster) {
-			return fmt.Errorf("incursão inválida na exportação")
+			return fmt.Errorf("raid inválida na exportação")
 		}
 		if _, err = tx.ExecContext(ctx, `INSERT INTO raid_reports(clan_tag,start_time,season,roster,roster_captured_at,roster_during_raid,synced_at) VALUES (?,?,?,?,?,?,?)`, raid.ClanTag, raid.StartTime, string(raid.Season), string(raid.Roster), raid.Captured, boolInt(raid.During), raid.Synced); err != nil {
-			return fmt.Errorf("incursão duplicada ou inválida na exportação")
+			return fmt.Errorf("raid duplicada ou inválida na exportação")
 		}
 	}
 	if _, err = tx.ExecContext(ctx, `SELECT setval(pg_get_serial_sequence('contact_people','id'),COALESCE((SELECT MAX(id) FROM contact_people),1),(SELECT COUNT(*)>0 FROM contact_people))`); err != nil {

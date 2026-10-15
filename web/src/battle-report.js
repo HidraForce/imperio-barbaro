@@ -45,6 +45,11 @@ export function battlePending(entry, clanTag, label, fallback = 1) {
     return status.remaining ? [{tag:member.tag,name:member.name,activity:label,used:status.used,limit:status.limit,ended:entry.war.state==='warEnded',verify:false}] : []
   })
 }
+export function filterBattleWarnings(items, attacks = 'all') {
+  return items.filter(item => Number.isInteger(item.used) && item.used >= 0
+    && Number.isFinite(item.limit) && item.used < item.limit
+    && (attacks === 'all' || item.used === Number(attacks)))
+}
 export function raidPending(record, now = Date.now()) {
   if (!record?.season) return []
   const season = record.season
@@ -57,7 +62,7 @@ export function raidPending(record, now = Date.now()) {
     const attacker = players.get(tagKey(member.tag)), used = attacker?.attacks || 0
     const limit = attacker?.attackLimit == null ? null : attacker.attackLimit+(attacker.bonusAttackLimit||0)
     if (limit == null ? used > 0 : used >= limit) return []
-    return [{tag:member.tag,name:member.name,activity:'Incursões · '+String(season.startTime||'').slice(0,8),used,limit,ended,verify:!attacker||!record.rosterDuringRaid}]
+    return [{tag:member.tag,name:member.name,activity:'Raids · '+String(season.startTime||'').slice(0,8),used,limit,ended,verify:!attacker||!record.rosterDuringRaid}]
   })
 }
 export function pendingMessage({clanName,clanTag,items,playerTag=''}) {
@@ -68,7 +73,7 @@ export function pendingMessage({clanName,clanTag,items,playerTag=''}) {
   const line = item => `• ${item.name} (${item.tag}) — ${item.activity}: ${item.used}${item.limit==null?' ataques registrados':'/'+item.limit+' ataques usados'}.`
   if (closed.length) lines.push('*Atividades encerradas — justificativa necessária*',...closed.map(line),'','Quem consta acima deve apresentar uma justificativa à liderança pela inadimplência nos ataques. Sem justificativa, ficará sob aviso.','')
   if (active.length) lines.push('*Atividades em andamento*',...active.map(line),'','O prazo ainda está aberto. Realize os ataques restantes antes do encerramento; se houver algum impedimento, avise a liderança.','')
-  if (chosen.some(item=>item.verify)) lines.push('Nas incursões, confirme a elegibilidade e eventual participação em outro clã com a liderança antes de aplicar o aviso.','')
+  if (chosen.some(item=>item.verify)) lines.push('Nas raids, confirme a elegibilidade e eventual participação em outro clã com a liderança antes de aplicar o aviso.','')
   lines.push('Caso já tenha se justificado ou identifique uma divergência nos registros, informe a liderança para conferência.')
   return lines.join('\n')
 }

@@ -1,0 +1,19 @@
+{
+  "revision": 1,
+  "items": [
+    {"id":"main-leader","clanId":"1","role":"Líder","name":"Cyborg","description":"Organização geral do clã, decisões finais, mediação de problemas e gestão da comunidade."},
+    {"id":"main-war-registration","clanId":"1","role":"Guerras · inscrições","name":"IMB AtlaS","description":"Inscrições e vagas de Guerra e CWL. Avise ausências ou solicite entrada na próxima guerra."},
+    {"id":"main-war-strategy","clanId":"1","role":"Guerras · estratégia","name":"O kerbess","description":"Estratégia e planejamento de ataques, dicas táticas e organização dos alvos no mapa."},
+    {"id":"main-war-analysis","clanId":"1","role":"Guerras · análise","name":"Dxgustavo","description":"Análise de replays de ataque e defesa, verificação dos layouts de guerra e aplicação de punições."},
+    {"id":"main-recruiting","clanId":"1","role":"Recrutamento · geral","name":"Will","description":"Recrutamento geral, com foco em vilas completas e Centros de Vila altos."},
+    {"id":"main-recruiting-analysis","clanId":"1","role":"Recrutamento · análise","name":"CLEE","description":"Recepção de novos membros e análise técnica da vila. Remove ou transfere para o secundário quem estiver com a vila rushada."},
+    {"id":"main-capital","clanId":"1","role":"Capital do clã","name":"Hidra Force","description":"Gestão da Capital, prioridades de construção e cobrança dos ataques de fim de semana."},
+    {"id":"main-clan-games","clanId":"1","role":"Jogos do clã","name":"","description":"Gestão dos Jogos do Clã, acompanhamento das pontuações e cobrança das metas individuais."},
+    {"id":"secondary-leader","clanId":"2","role":"Líder","name":"Suspeito","description":"Organização geral do clã, mediação de problemas e gestão da comunidade."},
+    {"id":"secondary-war-registration","clanId":"2","role":"Guerras · inscrições","name":"Capi02","description":"Inscrições e vagas de Guerra. Avise ausências ou solicite entrada na próxima guerra."},
+    {"id":"secondary-war-strategy","clanId":"2","role":"Guerras · estratégia","name":"CL","description":"Organização e planejamento de ataques nas guerras."},
+    {"id":"secondary-capital","clanId":"2","role":"Capital do clã","name":"","description":"Gestão da Capital, prioridades de construção e cobrança dos ataques de fim de semana."},
+    {"id":"secondary-clan-games","clanId":"2","role":"Jogos do clã","name":"","description":"Gestão dos Jogos do Clã, acompanhamento das pontuações e cobrança das metas individuais."},
+    {"id":"secondary-support","clanId":"2","role":"Suporte e gestão","name":"Aeshton","description":"Suporte, acolhimento de novatos no chat e nos grupos e orientação das regras."}
+  ]
+}

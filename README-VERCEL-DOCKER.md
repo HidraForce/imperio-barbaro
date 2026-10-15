@@ -132,7 +132,7 @@ A configuração de `Host` atende a um domínio público por vez. Use o endereç
 
 ## 4. Confira o funcionamento após publicar
 
-Abra o domínio público em uma janela privada. O navegador deve pedir `APP_USERNAME` e `APP_PASSWORD` antes de mostrar o painel. Confira os dois clãs, guerra, CWL, incursões e os downloads CSV.
+Associe `imperiobarbaro.com.br` e `dashboard.imperiobarbaro.com.br` ao mesmo projeto na Vercel e configure os registros DNS indicados pelo provedor. A página inicial no domínio principal deve abrir sem login. Abra `dashboard.imperiobarbaro.com.br` em uma janela privada. O navegador deve pedir `APP_USERNAME` e `APP_PASSWORD` antes de mostrar o painel. Confira os dois clãs, guerra, CWL, raids e os downloads CSV.
 
 Abra **Contatos**: a segunda senha deve ser necessária. Teste cadastrar e editar uma pessoa de teste, vincular contas e bloquear a área. Recrie o contêiner e confira que o cadastro continua no banco. Isso valida tanto as gravações pelo proxy quanto a persistência.
 

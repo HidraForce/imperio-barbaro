@@ -62,6 +62,10 @@ func main() {
 		log.Fatal(err)
 	}
 
+	if err := initLeadership(db); err != nil {
+		log.Fatal(err)
+	}
+
 	if *importFile != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
@@ -99,6 +103,8 @@ func main() {
 		jsonResponse(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 	r.Get("/api/config", a.config)
+	r.Get("/api/leadership", a.leadership)
+	r.Put("/api/leadership", a.saveLeadership)
 	r.Get("/api/clan", a.clan)
 	r.Get("/api/war", a.war)
 	r.Get("/api/raids", a.raids)
@@ -117,7 +123,7 @@ func main() {
 
 	port := env("PORT", "2025")
 	log.Printf("Painel disponível na porta :%s", port)
-	log.Fatal(secureServer(":"+port, r).ListenAndServe())
+	log.Fatal(secureServer(":"+port, secureHeaders(a.publicLeadership(publicHome(assets, r)))).ListenAndServe())
 }
 
 func (a *app) config(w http.ResponseWriter, _ *http.Request) {

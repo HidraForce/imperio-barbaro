@@ -4,7 +4,7 @@ import { resolve, extname, sep } from 'node:path'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 
-const types={'.html':'text/html; charset=utf-8','.js':'application/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.webmanifest':'application/manifest+json; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.ico':'image/x-icon'}
+const types={'.html':'text/html; charset=utf-8','.js':'application/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.webmanifest':'application/manifest+json; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.webp':'image/webp','.pdf':'application/pdf','.ico':'image/x-icon'}
 export function bindingURL(value){
  const url=new URL(value)
  if(!['http:','https:'].includes(url.protocol)||url.username||url.password||url.hash||url.search)throw Error('API_URL deve ser fornecida pelo binding interno da Vercel.')
@@ -26,6 +26,29 @@ export function createGateway({apiBase,dist=resolve('dist'),fetcher=fetch}){
  return async function gateway(req,res){
   let path,query
   try{const parsed=new URL(req.url,'http://crm.local');path=decodeURIComponent(parsed.pathname);query=parsed.search}catch{fail(res,400,'Endereço inválido.');return}
+  // This is the only anonymous dynamic resource: public website leadership.
+  if(path==='/public/leadership'){
+   if(!['GET','HEAD'].includes(req.method)){fail(res,405,'Método não permitido.');return}
+   try{
+    const upstream=await fetcher(apiURL(base,'/public/leadership'),{method:'GET',redirect:'manual',signal:AbortSignal.timeout(10000)})
+    if(!upstream.ok){fail(res,502,'Não foi possível carregar a liderança pública.');return}
+    const data=await upstream.json()
+    res.writeHead(200,{'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'})
+    res.end(req.method==='HEAD'?undefined:JSON.stringify(data))
+   }catch{fail(res,502,'Não foi possível carregar a liderança pública.')}
+   return
+  }
+  const host=String(req.headers.host||'').toLowerCase().replace(/:\d+$/,'')
+  if(['imperiobarbaro.com.br','www.imperiobarbaro.com.br'].includes(host)){
+   if(!['GET','HEAD'].includes(req.method)){fail(res,405,'Método não permitido.');return}
+   const name=new Map([['/','home.html'],['/home.css','home.css'],['/home.js','home.js'],['/icon.svg','icon.svg'],['/sw.js','sw.js'],['/imperio-hero-768.webp','imperio-hero-768.webp'],['/imperio-hero-1536.webp','imperio-hero-1536.webp'],['/regras-principal.pdf','regras-principal.pdf'],['/regras-secundario.pdf','regras-secundario.pdf']]).get(path)
+   if(!name){fail(res,404,'Página não encontrada.');return}
+   const filename=resolve(root,name),info=await stat(filename).catch(()=>null)
+   if(!info?.isFile()){fail(res,404,'Arquivo não encontrado.');return}
+   res.writeHead(200,{'content-type':types[extname(filename)],'content-length':info.size,'cache-control':'no-store','x-content-type-options':'nosniff','x-frame-options':'DENY','referrer-policy':'no-referrer','content-security-policy':"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'"})
+   if(req.method==='HEAD')res.end();else await pipeline(createReadStream(filename),res)
+   return
+  }
   const isAPI=path==='/api'||path.startsWith('/api/')
   if(isAPI&&!allowedOrigin(req)){fail(res,403,'Esta consulta deve ser feita pelo próprio painel.');return}
   if(isAPI&&!['GET','HEAD'].includes(req.method)&&req.headers['x-clanboard-request']!=='1'){fail(res,403,'Proteção de gravação ausente. Atualize o painel.');return}

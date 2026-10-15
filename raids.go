@@ -140,7 +140,7 @@ func (a *app) raids(w http.ResponseWriter, r *http.Request) {
 			Items []json.RawMessage `json:"items"`
 		}
 		if err := json.Unmarshal(body, &response); err != nil {
-			jsonResponse(w, 502, map[string]string{"error": "Resposta inválida da API do Clash para incursões."})
+			jsonResponse(w, 502, map[string]string{"error": "Resposta inválida da API do Clash para raids."})
 			return
 		}
 		if len(response.Items) > 0 {
@@ -168,7 +168,7 @@ func (a *app) raids(w http.ResponseWriter, r *http.Request) {
 						EndTime   string `json:"endTime"`
 					}
 					if err := json.Unmarshal(raw, &season); err != nil || season.StartTime == "" {
-						jsonResponse(w, 502, map[string]string{"error": "Temporada de incursões inválida."})
+						jsonResponse(w, 502, map[string]string{"error": "Temporada de raids inválida."})
 						return
 					}
 					start, startErr := time.Parse("20060102T150405.000Z", season.StartTime)
@@ -177,7 +177,7 @@ func (a *app) raids(w http.ResponseWriter, r *http.Request) {
 					_, err := a.db.ExecContext(r.Context(), `INSERT INTO raid_reports (clan_tag,start_time,season,roster,roster_captured_at,roster_during_raid,synced_at) VALUES (?,?,?,?,?,?,?)
       ON CONFLICT(clan_tag,start_time) DO UPDATE SET season=excluded.season, synced_at=excluded.synced_at`, tag, season.StartTime, string(raw), string(roster), rosterAt.Format(time.RFC3339), boolInt(during), now.Format(time.RFC3339))
 					if err != nil {
-						jsonResponse(w, 500, map[string]string{"error": "Não foi possível salvar os registros semanais de incursões."})
+						jsonResponse(w, 500, map[string]string{"error": "Não foi possível salvar os registros semanais de raids."})
 						return
 					}
 				}
@@ -189,7 +189,7 @@ func (a *app) raids(w http.ResponseWriter, r *http.Request) {
 	}
 	records, err := a.savedRaids(r.Context(), tag)
 	if err != nil {
-		jsonResponse(w, 500, map[string]string{"error": "Não foi possível ler os registros salvos de incursões."})
+		jsonResponse(w, 500, map[string]string{"error": "Não foi possível ler os registros salvos de raids."})
 		return
 	}
 	if warning != "" && len(records) == 0 {

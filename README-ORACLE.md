@@ -12,7 +12,7 @@ In your OCI **home region**, create these resources in a dedicated compartment:
 | Boot volume | **50 GB**, Always Free eligible settings; stores Docker and the database |
 | Network | VCN, public subnet, internet gateway, route `0.0.0.0/0` to that gateway |
 | Public IP | Prefer a reserved IPv4 attached to the VM, to keep DNS and the Clash API allowlist stable |
-| DNS | An A record such as `clan.example.com` pointing directly to that IPv4 |
+| DNS | A records for `imperiobarbaro.com.br` and `dashboard.imperiobarbaro.com.br` pointing directly to that IPv4 |
 
 As checked on **2026-10-13**, [Oracle's Always Free documentation](https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm) lists 1,500 A1 OCPU-hours and 9,000 GB-hours monthly (2 OCPUs / 12 GB total), 200 GB combined boot/block storage, and five volume backups. Other instances consume the same allowances. Check the console's eligibility and cost estimate before creating resources; older guides advertise larger A1 allowances. The trial credit is not the ongoing free allowance.
 
@@ -59,7 +59,7 @@ openssl rand -hex 32
 nano .env.oracle
 ```
 
-Set `DOMAIN` to the hostname only (no `https://` or path), `ACME_EMAIL` to your email, the two distinct generated passwords, clan tags, and API token. Never put credentials in a commit or frontend build. The production stack explicitly uses SQLite and does not inherit a PostgreSQL URL from your development `.env`.
+Set `DOMAIN=imperiobarbaro.com.br` and `DASHBOARD_DOMAIN=dashboard.imperiobarbaro.com.br` (hostnames only, no `https://` or path), `ACME_EMAIL` to your email, the two distinct generated passwords, clan tags, and API token. Never put credentials in a commit or frontend build. The production stack explicitly uses SQLite and does not inherit a PostgreSQL URL from your development `.env`.
 
 Create a key at the [Clash of Clans developer portal](https://developer.clashofclans.com/) with the VM's public outbound IPv4 in its allowed IP list. Keep the reserved IP attached to this VM; if the outbound address changes, update DNS and replace/reconfigure the API key. Do not use your laptop IP for this server token.
 
@@ -81,10 +81,12 @@ DNS must resolve to the server and ports 80/443 must be reachable for [Caddy aut
 ```bash
 # Expect an HTTP redirect to HTTPS.
 curl -I http://YOUR_DOMAIN
-# Expect 401 without credentials.
-curl -I https://YOUR_DOMAIN
+# Public homepage: expect 200 without credentials.
+curl -I https://imperiobarbaro.com.br
+# Private dashboard: expect 401 without credentials.
+curl -I https://dashboard.imperiobarbaro.com.br
 # Prompts for your APP_PASSWORD; expect {"status":"ok"}.
-curl --fail --user leader https://YOUR_DOMAIN/api/health
+curl --fail --user leader https://dashboard.imperiobarbaro.com.br/api/health
 ```
 
 Use your configured username if it differs from `leader`. Do not use `curl -k`: certificate validation should succeed. Open the HTTPS URL, check both clans, unlock contacts, and verify a saved contact survives `bash scripts/oracle-compose.sh restart clanboard`. Health confirms the server responds; the clan screens also verify the external API configuration.

@@ -19,7 +19,7 @@ test('Ataques parciais e bônus pendentes ficam vermelhos; todos os ataques usad
   assert.equal(rows[0].tag, '#A')
 })
 
-test('Jogadores fora da escalação e da lista de incursões não recebem pendências', () => {
+test('Jogadores fora da escalação e da lista de raids não recebem pendências', () => {
   const carlos = buildAttackOverview({ members, raidRecord, war }).find(r => r.tag === '#C')
   assert.equal(carlos.pendingCount, 0)
   assert.equal(carlos.statuses.war.label, 'Não escalado')
@@ -47,7 +47,7 @@ test('Ataques não realizados após o encerramento continuam visíveis, inclusiv
   assert.match(rows.find(r => r.tag === '#A').statuses.war.label, /Não realizados/)
 })
 
-test('Não presume conclusão quando o limite de ataques da incursão é desconhecido', () => {
+test('Não presume conclusão quando o limite de ataques da raid é desconhecido', () => {
   const rows = buildAttackOverview({ members, raidRecord: { roster: members, season: { members: [{ ...members[0], attacks: 3 }] } } })
   assert.equal(rows.find(r => r.tag === '#A').statuses.raids.tone, 'neutral')
 })

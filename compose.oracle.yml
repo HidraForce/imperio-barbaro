@@ -34,6 +34,7 @@ services:
     image: caddy:2-alpine
     environment:
       DOMAIN: ${DOMAIN:?Set DOMAIN to a public DNS hostname}
+      DASHBOARD_DOMAIN: ${DASHBOARD_DOMAIN:-dashboard.imperiobarbaro.com.br}
       ACME_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL}
     ports:
       - "80:80"
