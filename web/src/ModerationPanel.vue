@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { adminAPI } from './admin-api.js'
 import { moderationSummary, moderationMessage } from './moderation.js'
+import { moderationStatuses as statuses, moderationCSV, downloadCSV } from './admin-reports.js'
 const props = defineProps({ clanId: String, clanName: String, members: Array })
 const emit = defineEmits(['changed'])
 const records = ref([]), settings = ref(null), busy = ref(false), loaded = ref(false), error = ref(''), feedback = ref(''), filter = ref('all'), editing = ref(null), removal = ref(null), copyText = ref('')
@@ -16,7 +17,6 @@ const visible = computed(() => records.value.filter(record => {
   return filter.value === 'all' || record.kind === filter.value
 }))
 const url = path => path + '?clan=' + props.clanId
-const statuses = { pending: 'A conferir', active: 'Ativo', justified: 'Justificado', resolved: 'Encerrado', dismissed: 'Removido' }
 async function load() {
   const data = await adminAPI(url('/api/moderation'))
   records.value = data.items; settings.value = data.settings; loaded.value = true
@@ -70,7 +70,7 @@ onMounted(() => perform(load))
       <fieldset :disabled="busy"><legend>Avisos automáticos</legend>
         <label class="check-label"><input type="checkbox" :checked="settings.automatic" @change="toggleAutomatic"> Consultar automaticamente a cada 15 minutos</label>
         <p class="report-note">Guerra/CWL: somente jogadores escalados com zero ataques em atividades encerradas. Raids: zero ataques exige conferir elegibilidade e participação em outro clã antes de contar como aviso. Dados ausentes e ataques parciais não geram avisos automáticos. A primeira consulta considera os últimos sete dias disponíveis; guerras antigas que já saíram da API não podem ser recuperadas.</p>
-        <p class="report-note">A lista de raids precisa ter sido capturada durante o evento para identificar quem não participou. Ative a automação antes do próximo fim de semana para registrar essa lista. Nenhuma mensagem ou expulsão é executada automaticamente.</p>
+        <p class="report-note">A lista de raids precisa ter sido capturada durante o evento para identificar quem não participou. Ative a automação antes do próximo fim de semana para registrar essa lista. Entradas/retornos são acompanhados a cada 15 minutos: quem comprovadamente entrou depois do evento é excluído; entrada durante o evento ou data incerta fica a conferir e não conta como aviso ativo. O primeiro registro é uma referência, não a data real de entrada. Nenhuma mensagem ou expulsão é executada automaticamente.</p>
         <p v-if="settings.lastCheck" class="report-note">Última consulta: {{ new Date(settings.lastCheck).toLocaleString('pt-BR') }}</p>
         <p v-for="problem in settings.problems" :key="problem" class="notice error">{{ problem }}</p>
         <div class="editor-actions"><button class="secondary" @click="sync">Verificar zero ataques agora</button><button class="secondary" @click="perform(load)">Atualizar histórico</button></div>
@@ -86,7 +86,7 @@ onMounted(() => perform(load))
         <p v-if="form.status === 'pending'" class="report-note">Este registro ainda não conta como aviso. Após conferir, mude a situação para Ativo; se houver justificativa, selecione Justificado.</p>
         <div class="editor-actions"><button class="primary">{{ editing ? 'Salvar registro' : 'Adicionar à lista' }}</button><button type="button" class="secondary" @click="cancel">{{ editing ? 'Cancelar edição' : 'Limpar formulário' }}</button></div>
       </fieldset></form>
-      <div class="section"><h2>Histórico</h2><label>Exibir<select v-model="filter"><option value="all">Avisos e punições</option><option value="warning">Avisos</option><option value="punishment">Punições</option><option value="pending">A conferir</option><option value="dismissed">Removidos</option></select></label></div>
+      <div class="section"><h2>Histórico</h2><div class="editor-actions"><label>Exibir<select v-model="filter"><option value="all">Avisos e punições</option><option value="warning">Avisos</option><option value="punishment">Punições</option><option value="pending">A conferir</option><option value="dismissed">Removidos</option></select></label><button class="secondary" :disabled="busy || !visible.length" @click="downloadCSV(moderationCSV(visible, clanName), 'avisos-punicoes-cla-'+clanId+'-'+filter+'.csv')">↓ Exportar CSV (filtro)</button></div></div>
       <article v-for="record in visible" :key="record.id" class="moderation-record">
         <div class="editor-actions"><h3>{{ record.playerName }} <small>{{ record.playerTag }}</small></h3><span class="badge">{{ record.kind === 'punishment' ? 'Punição' : 'Aviso' }} · {{ statuses[record.status] }}</span></div>
         <p>{{ record.reason }}</p><p v-if="record.action"><strong>Medida:</strong> {{ record.action }}</p><p v-if="record.notes"><strong>Observações:</strong> {{ record.notes }}</p>

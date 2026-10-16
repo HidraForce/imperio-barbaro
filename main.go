@@ -38,6 +38,7 @@ type app struct {
 	pending       map[string]*clashFlight
 	retryAt       time.Time
 	moderationMu  sync.Mutex
+	membersMu     sync.Mutex
 }
 
 func main() {
@@ -70,6 +71,9 @@ func main() {
 		log.Fatal(err)
 	}
 	if err := initModeration(db); err != nil {
+		log.Fatal(err)
+	}
+	if err := initMembers(db); err != nil {
 		log.Fatal(err)
 	}
 
@@ -152,9 +156,29 @@ func (a *app) config(w http.ResponseWriter, _ *http.Request) {
 
 func (a *app) clan(w http.ResponseWriter, r *http.Request) {
 	tag, ok := a.selectedClanTag(w, r)
-	if ok {
-		a.clashGET(w, r, tag, "/clans/"+url.PathEscape("#"+tag))
+	if !ok {
+		return
 	}
+	body, status, err := a.trackClanMembers(r.Context(), tag)
+	if err != nil {
+		jsonResponse(w, status, map[string]string{"error": err.Error()})
+		return
+	}
+	observations, err := a.memberObservations(r.Context(), tag, time.Now().UTC())
+	if err != nil {
+		jsonResponse(w, 500, map[string]string{"error": "Não foi possível conferir as entradas de membros."})
+		return
+	}
+	var clan map[string]json.RawMessage
+	_ = json.Unmarshal(body, &clan)
+	var members []map[string]any
+	_ = json.Unmarshal(clan["memberList"], &members)
+	for _, member := range members {
+		key, _ := member["tag"].(string)
+		member["membership"] = observations["#"+normalizeTag(strings.ToUpper(key))]
+	}
+	clan["memberList"], _ = json.Marshal(members)
+	jsonResponse(w, 200, clan)
 }
 
 func (a *app) war(w http.ResponseWriter, r *http.Request) {

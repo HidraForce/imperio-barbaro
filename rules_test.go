@@ -26,6 +26,9 @@ func adminTestApp(t *testing.T) *app {
 	if err := initRaids(db); err != nil {
 		t.Fatal(err)
 	}
+	if err := initMembers(db); err != nil {
+		t.Fatal(err)
+	}
 	return &app{db: db, staticFS: os.DirFS("web/public"), clanTags: map[string]string{"1": "P0Y8LQ", "2": "QY8L0P"}}
 }
 func adminTestRouter(a *app) http.Handler {

@@ -175,7 +175,7 @@ func (a *app) raids(w http.ResponseWriter, r *http.Request) {
 					end, endErr := time.Parse("20060102T150405.000Z", season.EndTime)
 					during := startErr == nil && endErr == nil && !rosterAt.Before(start) && rosterAt.Before(end)
 					_, err := a.db.ExecContext(r.Context(), `INSERT INTO raid_reports (clan_tag,start_time,season,roster,roster_captured_at,roster_during_raid,synced_at) VALUES (?,?,?,?,?,?,?)
-      ON CONFLICT(clan_tag,start_time) DO UPDATE SET season=excluded.season, synced_at=excluded.synced_at`, tag, season.StartTime, string(raw), string(roster), rosterAt.Format(time.RFC3339), boolInt(during), now.Format(time.RFC3339))
+      ON CONFLICT(clan_tag,start_time) DO UPDATE SET season=excluded.season,synced_at=excluded.synced_at,roster=CASE WHEN raid_reports.roster_during_raid=0 AND excluded.roster_during_raid=1 THEN excluded.roster ELSE raid_reports.roster END,roster_captured_at=CASE WHEN raid_reports.roster_during_raid=0 AND excluded.roster_during_raid=1 THEN excluded.roster_captured_at ELSE raid_reports.roster_captured_at END,roster_during_raid=CASE WHEN excluded.roster_during_raid=1 THEN 1 ELSE raid_reports.roster_during_raid END`, tag, season.StartTime, string(raw), string(roster), rosterAt.Format(time.RFC3339), boolInt(during), now.Format(time.RFC3339))
 					if err != nil {
 						jsonResponse(w, 500, map[string]string{"error": "Não foi possível salvar os registros semanais de raids."})
 						return

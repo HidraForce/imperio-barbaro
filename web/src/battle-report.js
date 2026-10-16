@@ -1,4 +1,5 @@
 import { csvCell } from './report-csv.js'
+import { entryEligibility } from './member-eligibility.js'
 
 const tagKey = tag => String(tag || '').replace(/^#/, '').toUpperCase()
 export function ownSide(war, clanTag) {
@@ -39,8 +40,9 @@ export function battleCSV({ clanName, clanTag, type, season = '', rounds, regist
   }
   return '\uFEFF'+rows.map(row=>row.map(csvCell).join(',')).join('\r\n')
 }
-export function battlePending(entry, clanTag, label, fallback = 1) {
+export function battlePending(entry, clanTag, label, fallback = 1, members = []) {
   return (ownSide(entry.war,clanTag)?.members || []).flatMap(member => {
+    if (entryEligibility(members.find(m => tagKey(m.tag) === tagKey(member.tag)), entry.war)) return []
     const status = battleStatus(entry.war, member, fallback)
     return status.remaining ? [{tag:member.tag,name:member.name,activity:label,used:status.used,limit:status.limit,ended:entry.war.state==='warEnded',verify:false}] : []
   })
@@ -50,7 +52,7 @@ export function filterBattleWarnings(items, attacks = 'all') {
     && Number.isFinite(item.limit) && item.used < item.limit
     && (attacks === 'all' || item.used === Number(attacks)))
 }
-export function raidPending(record, now = Date.now()) {
+export function raidPending(record, now = Date.now(), members = []) {
   if (!record?.season) return []
   const season = record.season
   const end = Date.parse(String(season.endTime || '').replace(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})\.000Z$/, '$1-$2-$3T$4:$5:$6Z'))
@@ -59,7 +61,9 @@ export function raidPending(record, now = Date.now()) {
   const roster = new Map((record.roster || []).map(m=>[tagKey(m.tag),m]))
   const combined = new Map([...roster,...players])
   return [...combined.values()].flatMap(member=>{
+    if (entryEligibility(members.find(m => tagKey(m.tag) === tagKey(member.tag)), season)) return []
     const attacker = players.get(tagKey(member.tag)), used = attacker?.attacks || 0
+    if (!attacker && !record.rosterDuringRaid) return []
     const limit = attacker?.attackLimit == null ? null : attacker.attackLimit+(attacker.bonusAttackLimit||0)
     if (limit == null ? used > 0 : used >= limit) return []
     return [{tag:member.tag,name:member.name,activity:'Raids · '+String(season.startTime||'').slice(0,8),used,limit,ended,verify:!attacker||!record.rosterDuringRaid}]

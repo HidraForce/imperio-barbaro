@@ -27,6 +27,8 @@ type moderationRecord struct {
 	Notes      string `json:"notes"`
 	Source     string `json:"source"`
 	EventKey   string `json:"eventKey"`
+	EventStart string `json:"eventStart,omitempty"`
+	EventEnd   string `json:"eventEnd,omitempty"`
 	CreatedAt  string `json:"createdAt"`
 	UpdatedAt  string `json:"updatedAt"`
 }
@@ -183,6 +185,8 @@ func (a *app) saveModeration(w http.ResponseWriter, r *http.Request) {
 	record.ID = id
 	record.Source = saved.Source
 	record.EventKey = saved.EventKey
+	record.EventStart = saved.EventStart
+	record.EventEnd = saved.EventEnd
 	record.CreatedAt = saved.CreatedAt
 	record.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	if saved.Source != "manual" && (saved.PlayerTag != record.PlayerTag || saved.PlayerName != record.PlayerName || saved.Reason != record.Reason) {
@@ -264,6 +268,7 @@ type moderationSide struct {
 }
 type moderationWar struct {
 	State            string         `json:"state"`
+	StartTime        string         `json:"startTime"`
 	EndTime          string         `json:"endTime"`
 	AttacksPerMember int            `json:"attacksPerMember"`
 	Clan             moderationSide `json:"clan"`
@@ -303,6 +308,7 @@ func warWarnings(body []byte, tag, source, event string, since, now time.Time) [
 			continue
 		}
 		record := moderationRecord{PlayerTag: m.Tag, PlayerName: m.Name, Kind: "warning", Status: "active", Source: source, EventKey: source + ":" + event + ":" + normalizeTag(m.Tag), Reason: fmt.Sprintf("%s encerrada em %s: %d/%d ataques usados.", map[string]string{"war": "Guerra", "cwl": "CWL"}[source], war.EndTime, len(m.Attacks), limit)}
+		record.EventStart, record.EventEnd = war.StartTime, war.EndTime
 		if validModerationRecord(&record) {
 			records = append(records, record)
 		}
@@ -340,6 +346,7 @@ func raidWarnings(body []byte, rosters map[string][]raidRosterMember, since, now
 				continue
 			}
 			record := moderationRecord{PlayerTag: member.Tag, PlayerName: member.Name, Kind: "warning", Status: "pending", Source: "raids", EventKey: "raids:" + season.StartTime + ":" + normalizeTag(member.Tag), Reason: "Nenhum ataque registrado nas raids de " + season.StartTime + ". Membro na lista capturada durante o evento; confirmar elegibilidade e participação em outro clã."}
+			record.EventStart, record.EventEnd = season.StartTime, season.EndTime
 			if validModerationRecord(&record) {
 				records = append(records, record)
 			}
@@ -353,6 +360,7 @@ func raidWarnings(body []byte, rosters map[string][]raidRosterMember, since, now
 				continue
 			}
 			record := moderationRecord{PlayerTag: m.Tag, PlayerName: m.Name, Kind: "warning", Status: "pending", Source: "raids", EventKey: "raids:" + season.StartTime + ":" + normalizeTag(m.Tag), Reason: fmt.Sprintf("Raids de %s: %d/%d ataques usados. Conferir elegibilidade e participação em outro clã.", season.StartTime, m.Attacks, limit)}
+			record.EventStart, record.EventEnd = season.StartTime, season.EndTime
 			if validModerationRecord(&record) {
 				records = append(records, record)
 			}
@@ -372,6 +380,11 @@ func (a *app) collectWarnings(ctx context.Context, tag string) (int, []string, e
 	now := time.Now().UTC()
 	records := []moderationRecord{}
 	problems := []string{}
+	_, _, memberErr := a.trackClanMembers(ctx, tag)
+	members, historyErr := a.memberObservations(ctx, tag, now)
+	if memberErr != nil || historyErr != nil {
+		problems = append(problems, "Entradas de membros indisponíveis: novas ocorrências ficam a conferir, sem contar como avisos ativos.")
+	}
 	base := "/clans/" + url.PathEscape("#"+tag)
 	body, status, err := a.fetchClash(ctx, base+"/currentwar")
 	if err == nil {
@@ -394,9 +407,15 @@ func (a *app) collectWarnings(ctx context.Context, tag string) (int, []string, e
 				if r.RosterDuringRaid {
 					var season struct {
 						StartTime string `json:"startTime"`
+						EndTime   string `json:"endTime"`
 					}
 					if json.Unmarshal(r.Season, &season) == nil {
-						rosters[season.StartTime] = r.Roster
+						start, e1 := time.Parse("20060102T150405.000Z", season.StartTime)
+						end, e2 := time.Parse("20060102T150405.000Z", season.EndTime)
+						captured, e3 := time.Parse(time.RFC3339, r.RosterCapturedAt)
+						if e1 == nil && e2 == nil && e3 == nil && !captured.Before(start) && captured.Before(end) {
+							rosters[season.StartTime] = r.Roster
+						}
 					}
 				}
 			}
@@ -449,6 +468,7 @@ func (a *app) collectWarnings(ctx context.Context, tag string) (int, []string, e
 			}
 		}
 	}
+	records = membershipWarnings(records, members, memberErr == nil && historyErr == nil)
 	count := 0
 	for i := range records {
 		added, err := insertModeration(ctx, a.db, tag, &records[i])
@@ -500,6 +520,8 @@ func (a *app) runAutomaticWarnings() {
 				s, err := readModerationSettings(ctx, a.db, tag)
 				if err == nil && s.Automatic {
 					a.collectWarnings(ctx, tag)
+				} else {
+					a.trackClanMembers(ctx, tag)
 				}
 				cancel()
 			}
@@ -545,6 +567,6 @@ func (a *app) captureModerationRaidRoster(ctx context.Context, tag string, body 
 			continue
 		}
 		roster, _ := json.Marshal(clan.MemberList)
-		a.db.ExecContext(ctx, `INSERT INTO raid_reports(clan_tag,start_time,season,roster,roster_captured_at,roster_during_raid,synced_at) VALUES(?,?,?,?,?,1,?) ON CONFLICT(clan_tag,start_time) DO UPDATE SET season=excluded.season,synced_at=excluded.synced_at`, tag, season.StartTime, string(raw), string(roster), at.Format(time.RFC3339), at.Format(time.RFC3339))
+		a.db.ExecContext(ctx, `INSERT INTO raid_reports(clan_tag,start_time,season,roster,roster_captured_at,roster_during_raid,synced_at) VALUES(?,?,?,?,?,1,?) ON CONFLICT(clan_tag,start_time) DO UPDATE SET season=excluded.season,synced_at=excluded.synced_at,roster=CASE WHEN raid_reports.roster_during_raid=0 AND excluded.roster_during_raid=1 THEN excluded.roster ELSE raid_reports.roster END,roster_captured_at=CASE WHEN raid_reports.roster_during_raid=0 AND excluded.roster_during_raid=1 THEN excluded.roster_captured_at ELSE raid_reports.roster_captured_at END,roster_during_raid=CASE WHEN excluded.roster_during_raid=1 THEN 1 ELSE raid_reports.roster_during_raid END`, tag, season.StartTime, string(raw), string(roster), at.Format(time.RFC3339), at.Format(time.RFC3339))
 	}
 }
