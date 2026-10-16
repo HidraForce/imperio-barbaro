@@ -26,7 +26,6 @@ export function createGateway({apiBase,dist=resolve('dist'),fetcher=fetch}){
  return async function gateway(req,res){
   let path,query
   try{const parsed=new URL(req.url,'http://crm.local');path=decodeURIComponent(parsed.pathname);query=parsed.search}catch{fail(res,400,'Endereço inválido.');return}
-  // This is the only anonymous dynamic resource: public website leadership.
   if(path==='/public/leadership'){
    if(!['GET','HEAD'].includes(req.method)){fail(res,405,'Método não permitido.');return}
    try{

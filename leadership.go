@@ -16,7 +16,6 @@ import (
 	"unicode/utf8"
 )
 
-// Only these explicitly public fields are persisted and returned by this API.
 type leadershipItem struct {
 	ID          string `json:"id"`
 	ClanID      string `json:"clanId"`
@@ -64,7 +63,6 @@ func initLeadership(db *database) error {
 	)`); err != nil {
 		return err
 	}
-	// Restarting or deploying a new version must never replace administrators' edits.
 	if _, err = tx.Exec(`INSERT INTO public_leadership(id, revision, payload) VALUES(1, ?, ?) ON CONFLICT(id) DO NOTHING`, defaults.Revision, string(payload)); err != nil {
 		return err
 	}
@@ -201,8 +199,6 @@ func (a *app) saveLeadership(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, http.StatusOK, document)
 }
 
-// The sole public data endpoint intentionally bypasses authentication for reads
-// only. Every other path and method retains the existing home/auth middleware.
 func (a *app) publicLeadership(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/public/leadership" && (r.Method == http.MethodGet || r.Method == http.MethodHead) {

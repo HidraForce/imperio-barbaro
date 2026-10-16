@@ -32,7 +32,6 @@ func clashTTL(endpoint string) time.Duration {
 	}
 }
 
-// Cada recurso tem uma única consulta em andamento, compartilhada entre usuários.
 func (a *app) fetchClash(ctx context.Context, endpoint string) ([]byte, int, error) {
 	if a.db != nil && a.db.postgres {
 		return a.fetchClashShared(ctx, endpoint)
