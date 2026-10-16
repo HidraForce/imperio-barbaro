@@ -2,7 +2,12 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { adminAPI } from './admin-api.js'
 import RuleLines from './RuleLines.vue'
+import WhatsAppMessage from './WhatsAppMessage.vue'
+import { rulesMessage } from './rules-message.js'
 const draft = ref(null), saved = ref(''), busy = ref(false), error = ref(''), feedback = ref(''), conflict = ref(false), confirmReload = ref(false)
+const messageClan=ref('all'),previousPublication=ref(null)
+const published=computed(()=>saved.value?JSON.parse(saved.value):null)
+const whatsappMessage=computed(()=>rulesMessage(published.value,messageClan.value,previousPublication.value))
 const dirty = computed(() => draft.value && JSON.stringify(draft.value) !== saved.value)
 function accept(document) {
   draft.value = document
@@ -12,13 +17,15 @@ function accept(document) {
 }
 async function load() {
   busy.value = true; error.value = ''; feedback.value = ''
-  try { accept(await adminAPI('/api/rules')) } catch (failure) { error.value = failure.message }
+  try { accept(await adminAPI('/api/rules'));previousPublication.value=null } catch (failure) { error.value = failure.message }
   finally { busy.value = false }
 }
 async function save() {
   busy.value = true; error.value = ''; feedback.value = ''
   try {
+    const before=published.value
     accept(await adminAPI('/api/rules', { method: 'PUT', body: JSON.stringify(draft.value) }))
+    previousPublication.value=before
     feedback.value = 'Regras publicadas. O site já mostra a nova versão ao abrir ou atualizar a página.'
   } catch (failure) { error.value = failure.message; conflict.value = failure.status === 409 }
   finally { busy.value = false }
@@ -37,6 +44,10 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeLeaving))
     <p v-if="feedback && !dirty" class="notice" role="status">{{ feedback }}</p>
     <p v-if="busy" role="status">Carregando ou salvando regras…</p>
     <button v-if="!draft && !busy" class="secondary" @click="load">Tentar novamente</button>
+    <WhatsAppMessage v-if="published" title="Compartilhar regras e atualizações" :message="whatsappMessage" :busy="busy">
+      <p class="report-note">Depois de publicar, a mensagem destaca as alterações desta publicação. Ao abrir ou recarregar, ela mostra um resumo das regras vigentes com os links públicos. {{ dirty?'Há alterações não salvas; o texto abaixo usa a última versão publicada.':'' }}</p>
+      <label class="message-recipient">Regras para compartilhar<select v-model="messageClan"><option value="all">Comunidade e dois clãs</option><option value="general">Somente regras gerais</option><option v-for="clan in published.clans" :key="clan.id" :value="clan.id">{{ clan.name }} e regras gerais</option></select></label>
+    </WhatsAppMessage>
     <form v-if="draft" @submit.prevent="save">
       <div class="editor-actions rules-publish-bar"><button class="primary" :disabled="busy || !dirty || conflict">{{ busy ? 'Salvando…' : 'Salvar e publicar regras' }}</button><button type="button" class="secondary" :disabled="busy" @click="reload">Recarregar regras salvas</button></div>
       <p class="report-note" role="status">{{ dirty ? 'Alterações ainda não publicadas.' : 'Exibindo as regras publicadas.' }} Os links por tópico são preservados ao editar; remover um tópico também remove seu link.</p>

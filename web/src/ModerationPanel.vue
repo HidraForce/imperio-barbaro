@@ -1,7 +1,8 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { adminAPI } from './admin-api.js'
-import { moderationSummary, moderationMessage } from './moderation.js'
+import { moderationSummary, moderationMessage, punishmentListMessage } from './moderation.js'
+import WhatsAppMessage from './WhatsAppMessage.vue'
 import { moderationStatuses as statuses, moderationCSV, downloadCSV } from './admin-reports.js'
 const props = defineProps({ clanId: String, clanName: String, members: Array })
 const emit = defineEmits(['changed'])
@@ -10,6 +11,10 @@ const empty = () => ({ playerTag: '', playerName: '', kind: 'warning', status: '
 const form = ref(empty()), selectedMember = ref('')
 const summary = computed(() => moderationSummary(records.value))
 const decisions = computed(() => summary.value.filter(player => player.needsDecision))
+const messagePlayer=ref('')
+const punishedPlayers=computed(()=>[...new Map(records.value.filter(record=>record.kind==='punishment'&&record.status==='active'&&record.action?.trim()).map(record=>[record.playerTag,{tag:record.playerTag,name:record.playerName}])).values()])
+const punishmentMessage=computed(()=>punishmentListMessage(records.value,props.clanName,messagePlayer.value))
+watch(punishedPlayers,players=>{if(messagePlayer.value&&!players.some(player=>player.tag===messagePlayer.value))messagePlayer.value=''})
 const visible = computed(() => records.value.filter(record => {
   if (filter.value === 'dismissed') return record.status === 'dismissed'
   if (record.status === 'dismissed') return false
@@ -87,6 +92,10 @@ onMounted(() => perform(load))
         <div class="editor-actions"><button class="primary">{{ editing ? 'Salvar registro' : 'Adicionar à lista' }}</button><button type="button" class="secondary" @click="cancel">{{ editing ? 'Cancelar edição' : 'Limpar formulário' }}</button></div>
       </fieldset></form>
       <div class="section"><h2>Histórico</h2><div class="editor-actions"><label>Exibir<select v-model="filter"><option value="all">Avisos e punições</option><option value="warning">Avisos</option><option value="punishment">Punições</option><option value="pending">A conferir</option><option value="dismissed">Removidos</option></select></label><button class="secondary" :disabled="busy || !visible.length" @click="downloadCSV(moderationCSV(visible, clanName), 'avisos-punicoes-cla-'+clanId+'-'+filter+'.csv')">↓ Exportar CSV (filtro)</button></div></div>
+      <WhatsAppMessage title="Compartilhar lista de punições" :message="punishmentMessage" :busy="busy" empty="Nenhuma punição ativa com medida definida para compartilhar.">
+        <p class="report-note">Inclui somente punições ativas deste clã, com motivo e medida definidos pela liderança. Registros a conferir, justificados, encerrados ou removidos e observações internas ficam fora da mensagem.</p>
+        <label class="message-recipient">Destinatários da mensagem de punições<select v-model="messagePlayer" :disabled="busy"><option value="">Lista completa de punições ativas</option><option v-for="player in punishedPlayers" :key="player.tag" :value="player.tag">{{ player.name }} · {{ player.tag }}</option></select></label>
+      </WhatsAppMessage>
       <article v-for="record in visible" :key="record.id" class="moderation-record">
         <div class="editor-actions"><h3>{{ record.playerName }} <small>{{ record.playerTag }}</small></h3><span class="badge">{{ record.kind === 'punishment' ? 'Punição' : 'Aviso' }} · {{ statuses[record.status] }}</span></div>
         <p>{{ record.reason }}</p><p v-if="record.action"><strong>Medida:</strong> {{ record.action }}</p><p v-if="record.notes"><strong>Observações:</strong> {{ record.notes }}</p>
