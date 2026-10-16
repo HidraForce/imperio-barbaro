@@ -1,4 +1,3 @@
-// Public content only. Never use dashboard credentials or private endpoints here.
 const canonicalOrigin = 'https://imperiobarbaro.com.br'
 function openLinkedRule() {
   let id

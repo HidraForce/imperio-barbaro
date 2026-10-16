@@ -16,8 +16,6 @@ import (
 
 const contactSessionTTL = 10 * time.Minute
 
-// A senha adicional fica no ambiente; os tokens são aleatórios e só seus hashes
-// permanecem no servidor. O painel guarda o token apenas em memória.
 type contactVault struct {
 	store      *database
 	mu         sync.Mutex

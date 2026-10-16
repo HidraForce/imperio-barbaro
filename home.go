@@ -7,8 +7,6 @@ import (
 	"strings"
 )
 
-// Only these public hosts bypass the dashboard handler, and only for an
-// explicit set of public files. The dashboard's authentication stays intact.
 func publicHome(assets fs.FS, dashboard http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		host := r.Host

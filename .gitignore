@@ -4,13 +4,14 @@
 /web/node_modules/
 /web/dist/
 .DS_Store
-README-VERCEL.md
 .vercel/
 .env.local
 .env.*.local
 
 /migration-private*.json
 /backups/
+/.deploy/
+__pycache__/
 
 # Production settings and credentials; keep documented examples versioned.
 .env.*

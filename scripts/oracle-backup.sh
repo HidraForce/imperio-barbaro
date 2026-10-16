@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# Briefly stops the writer so SQLite, including WAL files, is consistent.
 set -euo pipefail
 umask 077
 cd "$(dirname "$0")/.."
+mkdir -p .deploy
+exec 9>.deploy/operation.lock
+flock -n 9 || { echo 'Another backup or deployment is running.' >&2; exit 1; }
 compose() { bash scripts/oracle-compose.sh "$@"; }
 if [[ -z "$(compose ps --status running -q clanboard)" ]]; then
   echo 'Start clanboard before running this backup.' >&2
