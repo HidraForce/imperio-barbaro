@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { buildAttackOverview } from './attack-overview.js'
 
 const members = [{ tag: '#A', name: 'Ana' }, { tag: '#B', name: 'Bruno' }, { tag: '#C', name: 'Carlos' }]
-const raidRecord = { roster: members.slice(0, 2), season: { state: 'ongoing', members: [{ ...members[0], attacks: 5, attackLimit: 5, bonusAttackLimit: 1 }] } }
+const raidRecord = { rosterDuringRaid: true, roster: members.slice(0, 2), season: { state: 'ongoing', members: [{ ...members[0], attacks: 5, attackLimit: 5, bonusAttackLimit: 1 }] } }
 const war = { state: 'inWar', attacksPerMember: 2, clan: { members: [{ ...members[0], attacks: [{}] }, { ...members[1], attacks: [{}, {}] }] } }
 
 test('Ataques parciais e bônus pendentes ficam vermelhos; todos os ataques usados ficam verdes', () => {

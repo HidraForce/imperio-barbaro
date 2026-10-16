@@ -1,3 +1,5 @@
+import { entryEligibility } from './member-eligibility.js'
+
 const tagKey = tag => (tag || '').replace(/^#/, '').toUpperCase()
 
 function neutral(label) { return { tone: 'neutral', label, pending: false } }
@@ -42,11 +44,18 @@ export function buildAttackOverview({ members = [], raidRecord, war, leagueWar, 
         const total = attacker?.attackLimit == null ? (used === 0 ? 5 : null) : attacker.attackLimit + (attacker.bonusAttackLimit || 0)
         raid = total == null ? neutral(`${used} ataques · limite indisponível`) : attackStatus(used, total, raidEnded)
       }
+      const eligibility = entryEligibility(member, raidRecord.season)
+      if (eligibility) raid = neutral(eligibility)
+      else if (!attacker && roster.has(key) && !raidRecord.rosterDuringRaid) raid = neutral('Lista histórica não confirmada')
     }
     const statuses = {
       raids: raid,
       war: battleStatus(warPlayers.get(key), war, loading, warError, 2),
       cwl: battleStatus(leaguePlayers.get(key), leagueWar, loading || leagueLoading, leagueError, 1),
+    }
+    for (const [activity, battle] of [['war', war], ['cwl', leagueWar]]) {
+      const eligibility = entryEligibility(member, battle)
+      if (eligibility && statuses[activity].pending) statuses[activity] = neutral(eligibility)
     }
     return { tag: member.tag, name: member.name, current: current.has(key), statuses, pendingCount: Object.values(statuses).filter(s => s.pending).length }
   }).sort((a, b) => b.pendingCount - a.pendingCount || a.name.localeCompare(b.name, 'pt-BR'))
