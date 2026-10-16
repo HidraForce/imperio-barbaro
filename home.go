@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-func publicHome(assets fs.FS, dashboard http.Handler) http.Handler {
+func publicHome(assets fs.FS, dashboard http.Handler, render ...http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		host := r.Host
 		if h, _, err := net.SplitHostPort(host); err == nil {
@@ -23,6 +23,10 @@ func publicHome(assets fs.FS, dashboard http.Handler) http.Handler {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
+		if r.URL.Path == "/" && len(render) > 0 {
+			render[0](w, r)
+			return
+		}
 		name := map[string]string{
 			"/":                       "home.html",
 			"/home.js":                "home.js",
@@ -31,8 +35,6 @@ func publicHome(assets fs.FS, dashboard http.Handler) http.Handler {
 			"/sw.js":                  "sw.js",
 			"/imperio-hero-768.webp":  "imperio-hero-768.webp",
 			"/imperio-hero-1536.webp": "imperio-hero-1536.webp",
-			"/regras-principal.pdf":   "regras-principal.pdf",
-			"/regras-secundario.pdf":  "regras-secundario.pdf",
 		}[r.URL.Path]
 		if name == "" {
 			http.NotFound(w, r)
@@ -41,8 +43,6 @@ func publicHome(assets fs.FS, dashboard http.Handler) http.Handler {
 		switch name {
 		case "imperio-hero-768.webp", "imperio-hero-1536.webp":
 			w.Header().Set("Content-Type", "image/webp")
-		case "regras-principal.pdf", "regras-secundario.pdf":
-			w.Header().Set("Content-Type", "application/pdf")
 		}
 		http.ServeFileFS(w, r, assets, name)
 	})

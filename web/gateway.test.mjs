@@ -50,12 +50,12 @@ test('Falha na API não entrega a página sem login nem revela endereços intern
  for(const url of ['ftp://interno','https://user:pass@interno','https://interno/?token=valor'])assert.throws(()=>bindingURL(url))
 })
 
-test('Domínio principal serve somente arquivos públicos sem consultar a API',async()=>{
+test('Domínio principal carrega regras atuais sem encaminhar credenciais',async()=>{
  const dir=await mkdtemp(join(tmpdir(),'home-gateway-'))
  await writeFile(join(dir,'home.html'),'<html>Império Bárbaro</html>')
  await writeFile(join(dir,'home.css'),'body{}')
  let calls=0
- const handler=createGateway({dist:dir,apiBase:'https://api.internal',fetcher:async()=>{calls++;return new Response('{}',{status:401,headers:{'www-authenticate':'Basic realm="CRM"'}})}})
+ const handler=createGateway({dist:dir,apiBase:'https://api.internal',fetcher:async(url,options)=>{calls++;if(String(url)==='https://api.internal/public/home'){assert.equal(options.headers,undefined);return new Response('<html>Império Bárbaro</html>')};return new Response('{}',{status:401,headers:{'www-authenticate':'Basic realm="CRM"'}})}})
  try{
   const home=await invoke(handler,'/',{host:'imperiobarbaro.com.br'})
   assert.equal(home.code,200);assert.match(home.data,/Império Bárbaro/)
@@ -65,17 +65,17 @@ test('Domínio principal serve somente arquivos públicos sem consultar a API',a
    assert.equal((await invoke(handler,path,{host:'imperiobarbaro.com.br',authorization:'Basic test'})).code,404)
   }
   assert.equal((await invoke(handler,'/',{host:'imperiobarbaro.com.br'},'POST')).code,405)
-  assert.equal(calls,0)
+  assert.equal(calls,2)
   assert.equal((await invoke(handler,'/',{host:'dashboard.imperiobarbaro.com.br','x-forwarded-host':'imperiobarbaro.com.br'})).code,401)
   assert.equal((await invoke(handler,'/api/contacts',{host:'dashboard.imperiobarbaro.com.br'})).code,401)
-  assert.equal(calls,2)
+  assert.equal(calls,4)
  }finally{await rm(dir,{recursive:true})}
 })
 
-test('Imagens WebP e PDFs públicos preservam bytes e tipo sem liberar outros arquivos',async()=>{
+test('Imagens públicas preservam bytes; PDFs removidos não são expostos',async()=>{
  const dir=await mkdtemp(join(tmpdir(),'home-assets-gateway-'))
  const bytes=Buffer.from([0x52,0x49,0x46,0x46,0x00,0xff,0x80,0x01])
- const files=new Map([['imperio-hero-768.webp','image/webp'],['imperio-hero-1536.webp','image/webp'],['regras-principal.pdf','application/pdf'],['regras-secundario.pdf','application/pdf']])
+ const files=new Map([['imperio-hero-768.webp','image/webp'],['imperio-hero-1536.webp','image/webp']])
  let calls=0
  const handler=createGateway({dist:dir,apiBase:'https://api.internal',fetcher:async()=>{calls++;return new Response('{}',{status:401})}})
  try{
@@ -87,7 +87,7 @@ test('Imagens WebP e PDFs públicos preservam bytes e tipo sem liberar outros ar
     assert.deepEqual(Buffer.concat(result.chunks),method==='GET'?bytes:Buffer.alloc(0))
    }
   }
-  for(const path of ['/private.webp','/private.pdf','/assets/imperio-hero-768.webp','/imperio-hero-3072.webp']){
+  for(const path of ['/regras-principal.pdf','/regras-secundario.pdf','/private.webp','/private.pdf','/assets/imperio-hero-768.webp','/imperio-hero-3072.webp']){
    assert.equal((await invoke(handler,path,{host:'imperiobarbaro.com.br'})).code,404)
   }
   assert.equal(calls,0)

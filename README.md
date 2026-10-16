@@ -35,7 +35,7 @@ O token e as senhas ficam no servidor. Não comite arquivos de ambiente, bancos 
 - Mensagens coletivas ou individuais para copiar no WhatsApp, incluindo filtros de zero e um ataque na guerra. O aplicativo não envia mensagens automaticamente.
 - Contatos por pessoa, com até 20 contas nos dois clãs e links para WhatsApp. A área exige a segunda senha, bloqueia ao sair ou ocultar a aba e expira em dez minutos.
 - Liderança editável no painel, publicada no site com cargos, responsáveis e vagas.
-- Regras públicas com PDFs e links por tópico, como `https://imperiobarbaro.com.br/#regras-principal-guerras`.
+- Regras públicas editáveis, com links externos opcionais para regulamentos e links por tópico, como `https://imperiobarbaro.com.br/#regras-principal-guerras`.
 - Interface em português, responsiva e instalável como PWA.
 
 O site público não contém links para o painel. O painel continua com a autenticação existente. O acesso dos líderes é compartilhado; não há contas individuais ou autenticação multifator.
@@ -61,3 +61,11 @@ go build ./...
 ```
 
 Os testes de PostgreSQL usam `TEST_DATABASE_URL`; o workflow de CI já fornece um banco descartável. Para trabalhar na interface, execute `npm run dev` em `web/`.
+
+## Regras, avisos e punições
+
+Em **Regras**, edite textos, tópicos, resumos dos clãs e links HTTPS dos regulamentos. Salvar publica diretamente no site; os PDFs antigos foram removidos. Links de tópicos existentes continuam funcionando, exceto se o tópico for removido.
+
+Em **Avisos e punições**, registre ocorrências manualmente, informe justificativas e remova entradas das listas. O primeiro aviso acompanha cooperação; dois ou mais avisos ativos destacam o jogador para decisão de punição pela liderança. Punições são cadastradas manualmente, com a medida escolhida. O resumo também aparece em **Visão geral**.
+
+A consulta automática é opcional por clã e roda no servidor a cada quinze minutos, mesmo com o painel fechado. Ela considera somente zero ataques de jogadores escalados em guerras/CWL encerradas. Nas raids, zero ataques exige revisão de elegibilidade; membros ausentes dos ataques só são identificados quando há uma lista capturada durante o evento. A primeira consulta cobre os últimos sete dias ainda disponíveis na API. Dados indisponíveis, reservas e ataques parciais não geram avisos. Remover uma ocorrência impede sua recriação na sincronização. Mensagens podem ser copiadas; não há envio automático ou expulsão pelo aplicativo.

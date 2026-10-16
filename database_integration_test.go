@@ -236,3 +236,53 @@ func TestPostgresCacheCoalescesAcrossInstancesAndSharesCooldown(t *testing.T) {
 		t.Fatal("API foi consultada durante a pausa compartilhada")
 	}
 }
+
+func TestRulesAndModerationAcrossDatabases(t *testing.T) {
+	for _, postgres := range []bool{false, true} {
+		t.Run(fmt.Sprint("postgres=", postgres), func(t *testing.T) {
+			db := integrationDatabase(t, postgres)
+			if err := initRules(db); err != nil {
+				t.Fatal(err)
+			}
+			if err := initModeration(db); err != nil {
+				t.Fatal(err)
+			}
+			a := &app{db: db, clanTags: map[string]string{"1": "P0Y8LQ", "2": "QY8L0P"}}
+			handler := adminTestRouter(a)
+			rules, err := readRules(context.Background(), db)
+			if err != nil {
+				t.Fatal(err)
+			}
+			rules.General.Title = "Regras atualizadas"
+			if result := adminTestRequest(handler, "PUT", "https://dashboard.imperiobarbaro.com.br/api/rules", rules, true); result.Code != 200 {
+				t.Fatal(result.Code, result.Body.String())
+			}
+			if err = initRules(db); err != nil {
+				t.Fatal(err)
+			}
+			saved, err := readRules(context.Background(), db)
+			if err != nil || saved.Revision != 2 || saved.General.Title != "Regras atualizadas" {
+				t.Fatal("rules edits lost", saved, err)
+			}
+			record := moderationRecord{PlayerTag: "#P0Y8LQ", PlayerName: "Jogador", Kind: "warning", Status: "active", Reason: "Zero ataques.", Source: "war", EventKey: "war:event:P0Y8LQ"}
+			added, err := insertModeration(context.Background(), db, "P0Y8LQ", &record)
+			if err != nil || !added {
+				t.Fatal("insert failed", added, err)
+			}
+			added, err = insertModeration(context.Background(), db, "P0Y8LQ", &record)
+			if err != nil || added {
+				t.Fatal("duplicate inserted", added, err)
+			}
+			if result := adminTestRequest(handler, "PUT", "https://dashboard.imperiobarbaro.com.br/api/moderation-settings?clan=1", map[string]any{"revision": 1, "automatic": true}, true); result.Code != 200 {
+				t.Fatal(result.Code, result.Body.String())
+			}
+			if result := adminTestRequest(handler, "PUT", "https://dashboard.imperiobarbaro.com.br/api/moderation-settings?clan=1", map[string]any{"revision": 2, "automatic": false}, true); result.Code != 200 {
+				t.Fatal(result.Code, result.Body.String())
+			}
+			settings, err := readModerationSettings(context.Background(), db, "P0Y8LQ")
+			if err != nil || settings.Revision != 3 || settings.Automatic {
+				t.Fatal("settings update failed", settings, err)
+			}
+		})
+	}
+}

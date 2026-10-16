@@ -8,6 +8,8 @@ const paths = {
   Roster: 'M9 3a4 4 0 1 1 0 8 4 4 0 0 1 0-8 M2 21v-4a5 5 0 0 1 5-5h4a5 5 0 0 1 5 5v4 M17 3a4 4 0 0 1 0 8 M18 13a5 5 0 0 1 4 5v3',
   Contacts: 'M5 3h15v18H5z M2 7h5 M2 12h5 M2 17h5 M10 7h6 M10 12h6 M10 17h4',
   Leadership: 'M3 3h18v18H3z M3 8h18 M7 12h4 M7 16h4 M15 12h2 M15 16h2',
+  Rules: 'M4 3h16v18H4z M8 7h8 M8 12h8 M8 17h5',
+  Moderation: 'M12 3l10 18H2z M12 9v5 M12 17v1',
   Shield: 'M12 2l9 4v7c0 4-4 7-9 9-5-2-9-5-9-9V6z M12 6v11 M7 11h10',
 }
 </script>

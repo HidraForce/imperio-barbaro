@@ -37,6 +37,7 @@ type app struct {
 	cache         map[string]clashCacheEntry
 	pending       map[string]*clashFlight
 	retryAt       time.Time
+	moderationMu  sync.Mutex
 }
 
 func main() {
@@ -63,6 +64,12 @@ func main() {
 	}
 
 	if err := initLeadership(db); err != nil {
+		log.Fatal(err)
+	}
+	if err := initRules(db); err != nil {
+		log.Fatal(err)
+	}
+	if err := initModeration(db); err != nil {
 		log.Fatal(err)
 	}
 
@@ -105,6 +112,13 @@ func main() {
 	r.Get("/api/config", a.config)
 	r.Get("/api/leadership", a.leadership)
 	r.Put("/api/leadership", a.saveLeadership)
+	r.Get("/api/rules", a.rules)
+	r.Put("/api/rules", a.saveRules)
+	r.Get("/api/moderation", a.moderation)
+	r.Post("/api/moderation", a.saveModeration)
+	r.Put("/api/moderation/{id}", a.saveModeration)
+	r.Put("/api/moderation-settings", a.saveModerationSettings)
+	r.Post("/api/moderation/sync", a.syncModeration)
 	r.Get("/api/clan", a.clan)
 	r.Get("/api/war", a.war)
 	r.Get("/api/raids", a.raids)
@@ -123,7 +137,8 @@ func main() {
 
 	port := env("PORT", "2025")
 	log.Printf("Painel disponível na porta :%s", port)
-	log.Fatal(secureServer(":"+port, secureHeaders(a.publicLeadership(publicHome(assets, r)))).ListenAndServe())
+	go a.runAutomaticWarnings()
+	log.Fatal(secureServer(":"+port, secureHeaders(a.publicContent(publicHome(assets, r, a.renderHome)))).ListenAndServe())
 }
 
 func (a *app) config(w http.ResponseWriter, _ *http.Request) {

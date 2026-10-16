@@ -173,7 +173,7 @@ func TestLeadershipPublicEndpointExposesOnlyRosterReads(t *testing.T) {
 	mux.HandleFunc("PUT /api/leadership", a.saveLeadership)
 	guard := newAccessGuard("leader", "a-long-private-test-password")
 	assets := fstest.MapFS{"home.html": {Data: []byte("public home")}}
-	handler := secureHeaders(a.publicLeadership(publicHome(assets, guard.middleware(sameOriginAPI(mux)))))
+	handler := secureHeaders(a.publicContent(publicHome(assets, guard.middleware(sameOriginAPI(mux)))))
 	for _, tc := range []struct {
 		name, method, host, path string
 		auth, marker             bool
