@@ -1,0 +1,184 @@
+{
+  "revision": 1,
+  "general": {
+    "title": "Respeito sempre. Sem exceções.",
+    "penalty": "Quebrou a regra = punição.",
+    "items": [
+      "Respeito sempre, sem xingamentos ou preconceito.",
+      "Proibido pornografia, nudez ou conteúdo +18.",
+      "Proibido gore, violência ou conteúdo pesado.",
+      "Sem spam, correntes ou fake news.",
+      "Sem brigas de religião, política ou futebol.",
+      "Sem expor conversas privadas de outros membros."
+    ]
+  },
+  "clans": [
+    {
+      "id": "1",
+      "anchor": "regras-principal",
+      "name": "Império Bárbaro",
+      "warSummary": "2 ataques obrigatórios",
+      "inactivitySummary": "3 dias de inatividade → remoção",
+      "documentUrl": "",
+      "topics": [
+        {
+          "id": "regras-principal-respeito",
+          "title": "Respeito e convivência",
+          "items": [
+            "Convivência respeitosa: sem insultos, preconceito, brigas ou provocações. Use um tom amigável e construtivo.",
+            "Assuntos individuais devem ser tratados exclusivamente no grupo SALA PRIVADA. Não chame a liderança no privado pessoal.",
+            "A presença no grupo do clã é obrigatória. Quem sair do grupo será removido do clã no jogo.",
+            "Respeite a hierarquia e as decisões da liderança. Sem drama, panelinhas, fofoca ou indiretas.",
+            "Agradeça as doações, sem cobrar. Receba os novatos com empatia e ajude na integração.",
+            "Mantenha neutralidade política e religiosa: o chat é focado no jogo. Respeite a privacidade dos membros.",
+            "Insultos, preconceito, brigas ou provocações podem gerar advertência ou remoção imediata. Não exponha quem demorou a doar e não pressione ninguém a fornecer redes sociais ou informações pessoais."
+          ]
+        },
+        {
+          "id": "regras-principal-cargos",
+          "title": "Promoções e cargos",
+          "items": [
+            "Membro: 7 dias de teste, avaliando postura, atividade e cumprimento das regras.",
+            "Ancião: atividade, doações constantes, 2 ataques nas guerras, meta dos Jogos cumprida e respeito no chat.",
+            "Colíder: cargo de confiança e alta responsabilidade. Exige no mínimo 1 a 2 meses de clã, fidelidade, maturidade, tática e capacidade de gerenciar guerras e resolver conflitos.",
+            "É proibido pedir cargo no chat: advertência. Ancião ou Colíder inativo ou que descumpra metas perde o cargo imediatamente."
+          ]
+        },
+        {
+          "id": "regras-principal-inatividade",
+          "title": "Inatividade e punições",
+          "items": [
+            "3 dias sem entrar e sem aviso: remoção direta. Avise antes no chat se viajar, tiver provas ou ficar sem internet.",
+            "Quem só entra para coletar recursos, sem doar, conversar ou participar de Jogos e guerras, é considerado inativo.",
+            "Quem foi removido somente por inatividade, sem desrespeito, pode voltar quando retomar o jogo.",
+            "Infrações leves: até 1 advertência verbal antes de rebaixamento ou expulsão. Infrações graves, como desrespeito, roubo de alvo na CWL ou inatividade em guerra: remoção sem aviso."
+          ]
+        },
+        {
+          "id": "regras-principal-guerras",
+          "title": "Guerras",
+          "items": [
+            "Os 2 ataques são obrigatórios para todos os marcados, ganhando ou perdendo. Participação mínima: 1 guerra por semana por membro.",
+            "Siga a estratégia do chat: espelho ou alvos definidos pela liderança. Não ataque apenas por recursos.",
+            "Ataque com Castelo do Clã cheio de tropas de guerra e feitiços. Doações de defesa são feitas somente por Centros de Vila mais altos ou autorizados.",
+            "Faça o 1º ataque nas primeiras 12 horas para liberar alvos. Tire dúvidas de alvo ou tropa com um Colíder antes.",
+            "Não teste layouts novos na guerra: use o Desafio Amistoso. Confirmou com 👍 no chat, deve fazer os 2 ataques. Avise a liderança imediatamente se um imprevisto impedir sua participação."
+          ]
+        },
+        {
+          "id": "regras-principal-cwl",
+          "title": "Liga de Guerra de Clãs · CWL",
+          "items": [
+            "7/7 ataques obrigatórios para quem for selecionado. Só participa quem está ativo e sem vila rushada.",
+            "Ataque o espelho ou o alvo marcado pela liderança. É proibido roubar alvo ou atacar só por recursos.",
+            "Use tropas maximizadas e Castelo do Clã cheio. Ataque em até 12 horas; no 1º dia, em até 6 horas.",
+            "Quem falta não ganha bônus e fica fora das próximas 2 guerras."
+          ]
+        },
+        {
+          "id": "regras-principal-raids",
+          "title": "Capital do clã · Raids",
+          "items": [
+            "5 ataques obrigatórios no fim de semana, mais o 6º ataque bônus se for liberado.",
+            "Finalize distritos já iniciados pelos colegas; não abra novos para deixá-los incompletos. Não roube distrito com 90% ou mais só para obter medalha fácil.",
+            "Aplique o ouro da Capital somente nas prioridades marcadas por Líder ou Colíder. Não gaste em decoração aleatória.",
+            "Deixar ataques sobrando enquanto estiver ativo no fim de semana gera advertência. Use medalhas para abastecer o próprio Castelo do Clã ou comprar recursos."
+          ]
+        },
+        {
+          "id": "regras-principal-jogos",
+          "title": "Jogos do clã",
+          "items": [
+            "Metas do regulamento: Membro, 4.000 pontos; Ancião, mínimo de 7.000; Colíder, 10.000 (máximo), obrigatório. Meta do clã: 50.000 pontos.",
+            "Fazer apenas 100 ou 200 pontos para garantir o prêmio e abandonar gera advertência e exclusão da próxima Guerra/CWL.",
+            "Cancele desafios difíceis que não conseguir concluir para liberar a fila. Nas últimas 24 horas, priorize ajudar quem ainda não atingiu 4.000 pontos.",
+            "Zero pontos estando ativo: rebaixamento direto ou expulsão."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "2",
+      "anchor": "regras-secundario",
+      "name": "Império Bárbar2",
+      "warSummary": "Opcionais; entrou, faça os 2 ataques",
+      "inactivitySummary": "5 dias de inatividade → remoção",
+      "documentUrl": "",
+      "topics": [
+        {
+          "id": "regras-secundario-respeito",
+          "title": "Respeito e convivência",
+          "items": [
+            "Convivência respeitosa: sem insultos, preconceito, brigas ou provocações. Use um tom amigável e construtivo.",
+            "Assuntos individuais devem ser tratados exclusivamente no grupo SALA PRIVADA. Não chame a liderança no privado pessoal.",
+            "A presença no grupo do clã é obrigatória. Quem sair do grupo será removido do clã no jogo.",
+            "Respeite a hierarquia e as decisões da liderança. Sem drama, panelinhas, fofoca ou indiretas.",
+            "Agradeça as doações, sem cobrar. Receba os novatos com empatia e ajude na integração.",
+            "Mantenha neutralidade política e religiosa: o chat é focado no jogo. Respeite a privacidade dos membros.",
+            "Aqui é uma escola: pode errar, perguntar e aprender. O foco é um ambiente saudável para recuperar vilas rushadas e aprender ataques. Insultos, preconceito, brigas e provocações geram advertência ou remoção."
+          ]
+        },
+        {
+          "id": "regras-secundario-cargos",
+          "title": "Promoções e cargos",
+          "items": [
+            "Membro: período de aprendizado, com avaliação de postura e atividade.",
+            "Ancião: ativo, ajuda os mais fracos com doações, participa de guerras e treinos e cumpre a meta dos Jogos.",
+            "Colíder: cargo de confiança e professor. Exige tempo de clã, paciência para ensinar, tática e maturidade.",
+            "É proibido pedir cargo. Quem fica inativo perde o cargo.",
+            "Para subir ao principal: Centro de Vila não rushado, heróis no nível, 30 dias de academia, atividade e indicação de um Colíder da academia."
+          ]
+        },
+        {
+          "id": "regras-secundario-inatividade",
+          "title": "Inatividade e punições",
+          "items": [
+            "5 dias sem entrar e sem aviso: remoção. Aviso prévio no chat segura a vaga por até 10 dias.",
+            "Quem só coleta, sem doar ou conversar, é considerado inativo. Quem saiu somente por inatividade pode voltar.",
+            "Infrações leves: 2 advertências antes da punição. Desrespeito ou inatividade em guerra marcada: remoção sem aviso."
+          ]
+        },
+        {
+          "id": "regras-secundario-guerras",
+          "title": "Guerras",
+          "items": [
+            "O foco é aprender, não só vencer. A guerra é opcional; se entrar, os 2 ataques são obrigatórios.",
+            "Pode atacar com heróis em melhoria. Siga o espelho ou alvo definido; peça dicas de tropas e estratégia aos Colíderes.",
+            "É proibido atacar só por recursos. Prefira atacar com Castelo do Clã cheio. Defesa da guerra: doação somente pelo Centro de Vila mais alto ou autorizado.",
+            "Tente fazer o 1º ataque nas primeiras 12 horas. Consulte um Colíder em caso de dúvida. Testes devem ser feitos no chat, em Desafio Amistoso.",
+            "Se confirmou com 👍 e não puder atacar, avise."
+          ]
+        },
+        {
+          "id": "regras-secundario-raids",
+          "title": "Capital do clã · Raids",
+          "items": [
+            "Ideal: 5 ataques mais o bônus no fim de semana. Um mínimo de 3 já ajuda.",
+            "Finalize distritos iniciados pelos colegas. Não roube distrito com 90% ou mais só pela medalha.",
+            "Doe ouro onde puder, priorizando o que o Líder marcar, sem meta pesada de 35.000. As tropas da Capital não gastam recursos: aproveite para treinar combinações.",
+            "Deixar ataques sobrando repetidamente gera advertência leve; não perde a vaga de primeira."
+          ]
+        },
+        {
+          "id": "regras-secundario-jogos",
+          "title": "Jogos do clã",
+          "items": [
+            "Mínimo ideal: 2.000 pontos. Meta recomendada: 3.000. Ancião e Colíder: de 4.000 a 6.000 para dar o exemplo.",
+            "Tente completar o máximo, sem pressão para atingir 50.000 pontos como clã.",
+            "Fazer apenas 100 pontos e parar gera aviso para melhorar, sem punição pesada de primeira. Cancele desafios travados.",
+            "Zero pontos estando ativo: rebaixamento e conversa com a liderança."
+          ]
+        },
+        {
+          "id": "regras-secundario-promocao",
+          "title": "Crescer com a equipe",
+          "items": [
+            "Quem se destaca no secundário sobe para o principal, seguindo os critérios de promoção.",
+            "Quem fica inativo, rusha a vila ou não bate metas no principal desce para o secundário para se recuperar.",
+            "Nosso papel é crescer juntos, apoiar a vila de cada membro e honrar a equipe."
+          ]
+        }
+      ]
+    }
+  ]
+}

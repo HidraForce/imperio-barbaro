@@ -26,11 +26,12 @@ export function createGateway({apiBase,dist=resolve('dist'),fetcher=fetch}){
  return async function gateway(req,res){
   let path,query
   try{const parsed=new URL(req.url,'http://crm.local');path=decodeURIComponent(parsed.pathname);query=parsed.search}catch{fail(res,400,'Endereço inválido.');return}
-  if(path==='/public/leadership'){
+  if(['/public/leadership','/public/rules','/public/home'].includes(path)){
    if(!['GET','HEAD'].includes(req.method)){fail(res,405,'Método não permitido.');return}
    try{
-    const upstream=await fetcher(apiURL(base,'/public/leadership'),{method:'GET',redirect:'manual',signal:AbortSignal.timeout(10000)})
+    const upstream=await fetcher(apiURL(base,path),{method:'GET',redirect:'manual',signal:AbortSignal.timeout(10000)})
     if(!upstream.ok){fail(res,502,'Não foi possível carregar a liderança pública.');return}
+    if(path==='/public/home'){res.writeHead(200,{'content-type':'text/html; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff','content-security-policy':"default-src 'self'; script-src 'self'; style-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'"});res.end(req.method==='HEAD'?undefined:await upstream.text());return}
     const data=await upstream.json()
     res.writeHead(200,{'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'})
     res.end(req.method==='HEAD'?undefined:JSON.stringify(data))
@@ -40,7 +41,8 @@ export function createGateway({apiBase,dist=resolve('dist'),fetcher=fetch}){
   const host=String(req.headers.host||'').toLowerCase().replace(/:\d+$/,'')
   if(['imperiobarbaro.com.br','www.imperiobarbaro.com.br'].includes(host)){
    if(!['GET','HEAD'].includes(req.method)){fail(res,405,'Método não permitido.');return}
-   const name=new Map([['/','home.html'],['/home.css','home.css'],['/home.js','home.js'],['/icon.svg','icon.svg'],['/sw.js','sw.js'],['/imperio-hero-768.webp','imperio-hero-768.webp'],['/imperio-hero-1536.webp','imperio-hero-1536.webp'],['/regras-principal.pdf','regras-principal.pdf'],['/regras-secundario.pdf','regras-secundario.pdf']]).get(path)
+   if(path==='/'){try{const upstream=await fetcher(apiURL(base,'/public/home'),{method:'GET',redirect:'manual',signal:AbortSignal.timeout(10000)});if(!upstream.ok){fail(res,502,'Não foi possível carregar a página pública.');return};res.writeHead(200,{'content-type':'text/html; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff','content-security-policy':"default-src 'self'; script-src 'self'; style-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'"});res.end(req.method==='HEAD'?undefined:await upstream.text())}catch{fail(res,502,'Não foi possível carregar a página pública.')};return}
+   const name=new Map([['/','home.html'],['/home.css','home.css'],['/home.js','home.js'],['/icon.svg','icon.svg'],['/sw.js','sw.js'],['/imperio-hero-768.webp','imperio-hero-768.webp'],['/imperio-hero-1536.webp','imperio-hero-1536.webp']]).get(path)
    if(!name){fail(res,404,'Página não encontrada.');return}
    const filename=resolve(root,name),info=await stat(filename).catch(()=>null)
    if(!info?.isFile()){fail(res,404,'Arquivo não encontrado.');return}

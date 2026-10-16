@@ -6,6 +6,9 @@ import UiIcon from './UiIcon.vue'
 import ContactsPanel from './ContactsPanel.vue'
 import PendingMessage from './PendingMessage.vue'
 import LeadershipPanel from './LeadershipPanel.vue'
+import RulesPanel from './RulesPanel.vue'
+import ModerationPanel from './ModerationPanel.vue'
+import { moderationSummary, moderationLabel } from './moderation.js'
 import { ownSide, seasonRows, battleCSV, battlePending, raidPending } from './battle-report.js'
 const tab=ref('Overview'), clan=ref(null), war=ref(null),  config=ref({configured:false,clans:[]}), selectedClan=ref('1'), loading=ref(true), error=ref(''), warError=ref(''), raidError=ref('')
 const leagueGroup=ref(null), leagueWar=ref(null), leagueLoading=ref(false), leagueWarLoading=ref(false), leagueError=ref(''), leagueMessage=ref(''), roundMessage=ref(''), roundError=ref(''), selectedRound=ref(1)
@@ -63,8 +66,11 @@ async function loadAllRounds(){
 function chooseRound(number){leagueView.value='round';selectedRound.value=number;loadLeagueRound()}
 watch(tab,value=>{if(['Overview','CWL'].includes(value)&&config.value.configured&&!loading.value&&!leagueGroup.value&&!leagueLoading.value)loadLeague()})
 const raidRecords=ref([]), selectedWeekend=ref(''), raidFilter=ref('all')
-const tabs=['Overview','Raids','CWL','War','Roster','Contacts','Leadership']
-const tabLabels={Overview:'Visão geral',Raids:'Raids',CWL:'Liga',War:'Guerra',Roster:'Membros',Contacts:'Contatos',Leadership:'Liderança'}
+const moderationRecords=ref([]), moderationError=ref('')
+const disciplinePlayers=computed(()=>moderationSummary(moderationRecords.value))
+function disciplineFor(tag){return disciplinePlayers.value.find(p=>p.tag.replace(/^#/,'').toUpperCase()===tag.replace(/^#/,'').toUpperCase())}
+const tabs=['Overview','Raids','CWL','War','Roster','Contacts','Moderation','Rules','Leadership']
+const tabLabels={Overview:'Visão geral',Raids:'Raids',CWL:'Liga',War:'Guerra',Roster:'Membros',Contacts:'Contatos',Leadership:'Liderança',Rules:'Regras',Moderation:'Avisos e punições'}
 function roleLabel(role){return ({leader:'Líder',coLeader:'Colíder',admin:'Ancião',member:'Membro'})[role]||'Membro'}
 const members=computed(()=>clan.value?.memberList||[]), warMembers=computed(()=>war.value?.clan?.members||[])
 const activeClanTag=computed(()=>config.value.clans?.find(c=>c.id===selectedClan.value)?.tag||'')
@@ -102,8 +108,10 @@ async function load(){
  try{
   config.value=await api('/api/config')
   if(!config.value.clans?.some(c=>c.id===selectedClan.value&&c.configured))selectedClan.value=config.value.clans?.find(c=>c.configured)?.id||'1'
+  const suffix='?clan='+selectedClan.value
+  moderationRecords.value=[];moderationError.value=''
+  if(activeClanTag.value){try{moderationRecords.value=(await api('/api/moderation'+suffix)).items||[]}catch(e){moderationError.value=e.message}}
   if(config.value.configured){
-   const suffix='?clan='+selectedClan.value
    const results=await Promise.allSettled([api('/api/clan'+suffix),api('/api/war'+suffix),api('/api/raids'+suffix)])
    if(results[0].status==='fulfilled')clan.value=results[0].value;else error.value=results[0].reason.message
    if(results[1].status==='fulfilled')war.value=results[1].value;else warError.value=results[1].reason.message
@@ -153,16 +161,24 @@ const messageItems=computed(()=>{
  }
  return items
 })
+watch(tab,()=>window.scrollTo({top:0,behavior:'instant'}))
 onMounted(load)
 </script>
 <template>
 <div class="shell">
   <aside class="sidebar"><div class="brand"><span class="brand-icon"><UiIcon name="Shield"/></span> IMPÉRIO<span class="light"> BÁRBARO CRM</span></div><div class="label">SEU CLÃ</div><div class="clan"><span class="crest"><UiIcon name="War"/></span><span><b>{{ clan?.name||'Painel do clã' }}</b><small>{{ activeClanTag?'#'+activeClanTag:'Selecione um clã configurado' }}</small></span><i class="dot"></i></div><div class="label nav-label">GESTÃO</div><button v-for="item in tabs" :key="item" class="nav" :class="{active:tab===item}" @click="tab=item"><UiIcon :name="item"/>{{ tabLabels[item] }}</button><div class="sidebar-foot"><i class="dot"></i> Conexão com a API <b>{{ config.configured?'Configurada':'Configuração necessária' }}</b><button @click="load">↻ &nbsp;Atualizar dados</button></div></aside>
   <main><header><span>GESTÃO DO CLÃ <span class="header-section">&nbsp; / &nbsp; <b>{{ tabLabels[tab].toUpperCase() }}</b></span></span><span class="live"><i class="dot"></i> DADOS DO CLÃ</span></header><div class="content">
-    <div class="heading"><div><small>PAINEL DO CLÃ</small><h1>{{ tab==='Overview'?'Controle de ataques':tab==='CWL'?'Liga de Guerra de Clãs':tabLabels[tab] }}</h1><p>{{ clan?.name?clan.name+' · #'+activeClanTag:'Acompanhe seu clã em um só lugar.' }}</p></div><div class="heading-actions" v-if="tab!=='Leadership'"><div class="clan-switch" v-if="config.clans?.some(c=>c.configured)"><button v-for="c in config.clans" :key="c.id" :disabled="!c.configured||loading" :class="{selected:selectedClan===c.id}" @click="chooseClan(c.id)">Clã {{ c.id }}</button></div><button class="primary" :disabled="loading" @click="load">↻ &nbsp;Sincronizar</button></div></div>
-    <p v-if="!['Overview','Contacts','Leadership'].includes(tab)" class="report-note">Cache compartilhado: clã por 5 minutos, guerras e liga por 1 minuto e raids por 15 minutos. Sincronizar reutiliza os dados dentro desse prazo.</p>
-    <div v-if="error" class="notice error">{{ error }} <button @click="error=''">×</button></div><div v-if="!config.configured&&tab!=='Leadership'" class="notice">⌁ &nbsp; Configure <code>CLASH_API_TOKEN</code>, <code>CLAN_TAG1</code> e <code>CLAN_TAG2</code> no .env e reinicie o aplicativo.</div><p v-if="loading" class="loading">Carregando dados do clã…</p>
+    <div class="heading"><div><small>PAINEL DO CLÃ</small><h1>{{ tab==='Overview'?'Controle de ataques':tab==='CWL'?'Liga de Guerra de Clãs':tabLabels[tab] }}</h1><p>{{ clan?.name?clan.name+' · #'+activeClanTag:'Acompanhe seu clã em um só lugar.' }}</p></div><div class="heading-actions" v-if="!['Leadership','Rules'].includes(tab)"><div class="clan-switch" v-if="config.clans?.some(c=>c.configured)"><button v-for="c in config.clans" :key="c.id" :disabled="!c.configured||loading" :class="{selected:selectedClan===c.id}" @click="chooseClan(c.id)">Clã {{ c.id }}</button></div><button class="primary" :disabled="loading" @click="load">↻ &nbsp;Sincronizar</button></div></div>
+    <p v-if="!['Overview','Contacts','Leadership','Rules','Moderation'].includes(tab)" class="report-note">Cache compartilhado: clã por 5 minutos, guerras e liga por 1 minuto e raids por 15 minutos. Sincronizar reutiliza os dados dentro desse prazo.</p>
+    <div v-if="error" class="notice error">{{ error }} <button @click="error=''">×</button></div><div v-if="!config.configured&&!['Leadership','Rules'].includes(tab)" class="notice">⌁ &nbsp; Configure <code>CLASH_API_TOKEN</code>, <code>CLAN_TAG1</code> e <code>CLAN_TAG2</code> no .env e reinicie o aplicativo.</div><p v-if="loading" class="loading">Carregando dados do clã…</p>
     <template v-if="tab==='Overview'">
+      <section class="discipline-overview" aria-labelledby="discipline-title">
+        <div class="section"><h2 id="discipline-title">Avisos e punições</h2><button class="secondary" @click="tab='Moderation'">Gerenciar listas</button></div>
+        <p><strong>1º aviso:</strong> acompanhar quem não está cooperando. <strong>2º aviso ou mais:</strong> avaliar punição com a liderança. Somente zero ataques em guerra/CWL com escalação confirmada gera aviso automático. Raids sem ataques precisam de conferência de elegibilidade.</p>
+        <p v-if="moderationError" class="notice error" role="alert">Histórico indisponível: {{ moderationError }}. Não é possível confirmar a situação disciplinar.</p>
+        <ul v-else-if="disciplinePlayers.length"><li v-for="person in disciplinePlayers" :key="person.tag"><strong>{{ person.name }}</strong> · {{ person.tag }} — {{ moderationLabel(person) }}<span v-if="person.pending && (person.warnings || person.punishments)"> · {{ person.pending }} ocorrência(s) a conferir</span></li></ul>
+        <p v-else-if="!loading">Nenhum aviso ou punição ativo neste clã.</p>
+      </section>
       <div class="attack-toolbar">
         <div><h2>Quem precisa atacar <em>{{ pendingPlayers }} jogadores</em></h2><p>Pendências primeiro. Verde: todos os ataques usados. Vermelho: faltam ataques. Cinza: sem obrigação confirmada ou sem dados.</p></div>
         <label class="pending-toggle"><input type="checkbox" v-model="onlyPending"> Só pendências</label>
@@ -182,7 +198,7 @@ onMounted(load)
           <thead><tr><th scope="col">JOGADOR</th><th v-for="column in overviewColumns" :key="column.key" :class="'activity-'+column.key" scope="col">{{ column.label }}</th></tr></thead>
           <tbody>
             <tr v-for="player in visibleOverviewRows" :key="player.tag" :class="{'has-pending':player.pendingCount>0}">
-              <th scope="row"><b>{{ player.name }}</b><small>{{ player.tag }}{{ player.current?'':' · Fora do clã atual' }}</small></th>
+              <th scope="row"><b>{{ player.name }}</b><small>{{ player.tag }}{{ player.current?'':' · Fora do clã atual' }}</small><span v-if="disciplineFor(player.tag)" class="discipline-tag" :class="{penalty:disciplineFor(player.tag).needsDecision||disciplineFor(player.tag).punishments}">{{ moderationLabel(disciplineFor(player.tag)) }}</span></th>
               <td v-for="column in overviewColumns" :key="column.key"><span class="attack-status" :class="player.statuses[column.key].tone" :title="player.statuses[column.key].label" :aria-label="column.label+': '+player.statuses[column.key].label" role="img"><i class="attack-dot" aria-hidden="true"></i><span class="attack-detail" aria-hidden="true">{{ player.statuses[column.key].label }}</span><span class="attack-short" aria-hidden="true">{{ player.statuses[column.key].tone==='neutral'?'—':player.statuses[column.key].label.split(' · ')[0] }}</span></span></td>
             </tr>
             <tr v-if="!visibleOverviewRows.length"><td colspan="4" class="empty">{{ loading?'Carregando jogadores…':onlyPending?'Nenhuma pendência identificada nos dados disponíveis.':'Nenhum jogador disponível. Configure o clã e sincronize os dados.' }}</td></tr>
@@ -236,6 +252,8 @@ onMounted(load)
     <template v-else-if="tab==='War'"><div v-if="warError" class="notice">{{ warError }}</div><div class="stats three"><article><small>SUAS ESTRELAS</small><strong>{{ war?.clan?.stars??'—' }}</strong><span>{{ war?.clan?.attacks||0 }} ataques usados</span></article><article><small>ESTRELAS DO ADVERSÁRIO</small><strong>{{ war?.opponent?.stars??'—' }}</strong><span>{{ war?.opponent?.attacks||0 }} ataques usados</span></article><article><small>SITUAÇÃO DA GUERRA</small><strong class="small-strong">{{ warState }}</strong><span>{{ war?.teamSize||0 }} participantes</span></article></div><div class="section"><div><small>ACOMPANHAMENTO DE ATAQUES</small><h2>Ataques de guerra</h2></div><button class="secondary" :disabled="loading||!!warError||!warMembers.length" @click="downloadBattle('Guerra')">↓ Exportar CSV</button></div><section class="table-wrap"><table><thead><tr><th>JOGADOR</th><th>ATAQUES</th><th>ESTRELAS</th><th>DESTRUIÇÃO</th><th>ALVO</th></tr></thead><tbody><tr v-for="m in warMembers" :key="m.tag"><td><b>{{ m.name }}</b><small>{{ m.tag }}</small></td><td>{{ m.attacks?.length||0 }} / {{ war?.attacksPerMember||2 }}</td><td class="stars">{{ '★'.repeat(stars(m)) }}</td><td>{{ percent(m) }}%</td><td>{{ m.attacks?.map(a=>a.defenderTag).join(', ')||'Não atacou' }}</td></tr><tr v-if="!warMembers.length"><td class="empty" colspan="5">Nenhum ataque de guerra ativo para exibir.</td></tr></tbody></table></section></template>
     <template v-else-if="tab==='Roster'"><div class="section"><div><small>TODOS OS MEMBROS</small><h2>Membros do clã <em>{{ members.length }}</em></h2></div></div><section class="table-wrap"><table><thead><tr><th>JOGADOR</th><th>CARGO</th><th>NÍVEL</th><th>TROFÉUS</th><th>DOAÇÕES</th><th>ESTRELAS DE GUERRA</th></tr></thead><tbody><tr v-for="m in members" :key="m.tag"><td><b>{{ m.name }}</b><small>{{ m.tag }}</small></td><td>{{ roleLabel(m.role) }}</td><td>{{ m.expLevel }}</td><td>🏆 {{ m.trophies }}</td><td>{{ m.donations }}</td><td>{{ m.warStars }}</td></tr><tr v-if="!members.length"><td colspan="6" class="empty">Os membros aparecerão aqui quando a API estiver conectada.</td></tr></tbody></table></section></template>
     <template v-else-if="tab==='Contacts'"><ContactsPanel :configured="config.contactsConfigured" :loading="loading" :clans="config.clans"/></template>
+    <ModerationPanel v-if="tab==='Moderation'" :key="selectedClan" :clan-id="selectedClan" :clan-name="clan?.name||('Clã '+selectedClan)" :members="members" @changed="if($event.clanId===selectedClan){moderationRecords=$event.items;moderationError=''}"/>
+    <KeepAlive><RulesPanel v-if="tab==='Rules'"/></KeepAlive>
     <KeepAlive><LeadershipPanel v-if="tab==='Leadership'"/></KeepAlive>
     <PendingMessage :war-mode="tab==='War'" v-if="['Overview','Raids','CWL','War'].includes(tab)" :clan-name="clan?.name||('Clã '+selectedClan)" :clan-tag="activeClanTag" :items="messageItems" :busy="messageBusy" :context="messageContext"/>
     <footer>IMPÉRIO BÁRBARO CRM &nbsp;·&nbsp; CONTROLE DE ATAQUES &nbsp;·&nbsp; {{ new Date().getFullYear() }}</footer>

@@ -199,8 +199,21 @@ func (a *app) saveLeadership(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, http.StatusOK, document)
 }
 
-func (a *app) publicLeadership(next http.Handler) http.Handler {
+func (a *app) publicContent(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/public/rules" || r.URL.Path == "/public/home" {
+			if r.Method != http.MethodGet && r.Method != http.MethodHead {
+				w.Header().Set("Allow", "GET, HEAD")
+				http.Error(w, "Método não permitido.", 405)
+				return
+			}
+			if r.URL.Path == "/public/rules" {
+				a.rules(w, r)
+			} else {
+				a.renderHome(w, r)
+			}
+			return
+		}
 		if r.URL.Path == "/public/leadership" && (r.Method == http.MethodGet || r.Method == http.MethodHead) {
 			a.leadership(w, r)
 			return

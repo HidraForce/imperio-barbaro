@@ -15,8 +15,6 @@ func TestPublicHomeBinaryAssets(t *testing.T) {
 	files := map[string]string{
 		"imperio-hero-768.webp":  "image/webp",
 		"imperio-hero-1536.webp": "image/webp",
-		"regras-principal.pdf":   "application/pdf",
-		"regras-secundario.pdf":  "application/pdf",
 	}
 	for name := range files {
 		assets[name] = &fstest.MapFile{Data: content}
@@ -48,7 +46,7 @@ func TestPublicHomeBinaryAssets(t *testing.T) {
 			t.Fatalf("dashboard asset %s bypassed authentication: %d", name, res.Code)
 		}
 	}
-	for _, name := range []string{"private.webp", "private.pdf", "assets/imperio-hero-768.webp", "imperio-hero-3072.webp"} {
+	for _, name := range []string{"regras-principal.pdf", "regras-secundario.pdf", "private.webp", "private.pdf", "assets/imperio-hero-768.webp", "imperio-hero-3072.webp"} {
 		res := httptest.NewRecorder()
 		handler.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "https://imperiobarbaro.com.br/"+name, nil))
 		if res.Code != http.StatusNotFound {
