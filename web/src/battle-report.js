@@ -73,11 +73,13 @@ export function raidPending(record, now = Date.now(), members = []) {
 export function pendingMessage({clanName,clanTag,items,playerTag='',phones={}}) {
   const chosen = items.filter(item=>!playerTag||tagKey(item.tag)===tagKey(playerTag))
   if (!chosen.length) return ''
-  const closed = chosen.filter(item=>item.ended), active = chosen.filter(item=>!item.ended)
-  const lines = [`*${clanName || 'Clã'} · #${tagKey(clanTag)}*`, playerTag ? `*Atenção, ${playerMessageLabel(chosen[0].name,chosen[0].tag,phones)}*` : '*Aviso de pendências de ataques*', '']
-  const line = item => `• ${playerMessageLabel(item.name,item.tag,phones)} — ${item.activity}: ${item.used}${item.limit==null?' ataques registrados':'/'+item.limit+' ataques usados'}.`
+  const closed = chosen.filter(item=>item.ended&&item.current!==false&&item.current!==null), active = chosen.filter(item=>!item.ended&&item.current!==false&&item.current!==null), former=chosen.filter(item=>item.current===false), unconfirmed=chosen.filter(item=>item.current===null)
+  const lines = [`*${clanName || 'Clã'} · #${tagKey(clanTag)}*`, playerTag ? `*Atenção, ${playerMessageLabel(chosen[0].name,chosen[0].tag,phones,chosen[0].current)}*` : '*Aviso de pendências de ataques*', '']
+  const line = item => `• ${playerMessageLabel(item.name,item.tag,phones,item.current)} — ${item.activity}: ${item.used}${item.limit==null?' ataques registrados':'/'+item.limit+' ataques usados'}.`
   if (closed.length) lines.push('*Atividades encerradas — justificativa necessária*',...closed.map(line),'','Quem consta acima deve apresentar uma justificativa à liderança pela inadimplência nos ataques. Sem justificativa, ficará sob aviso.','')
   if (active.length) lines.push('*Atividades em andamento*',...active.map(line),'','O prazo ainda está aberto. Realize os ataques restantes antes do encerramento; se houver algum impedimento, avise a liderança.','')
+  if (former.length) lines.push('*Fora do clã atual — histórico de ataques*',...former.map(line),'','Esses jogadores não constam na lista atual deste clã. Os registros acima são históricos; confira as datas e o vínculo com a liderança. Esta seção não é uma cobrança aos membros atuais.','')
+  if (unconfirmed.length) lines.push('*Vínculo não conferido — confirmar lista atual*',...unconfirmed.map(line),'','Não foi possível conferir a lista atual deste clã. Confirme o vínculo e as datas dos registros com a liderança antes de fazer qualquer cobrança.','')
   if (chosen.some(item=>item.verify)) lines.push('Nas raids, confirme a elegibilidade e eventual participação em outro clã com a liderança antes de aplicar o aviso.','')
   lines.push('Caso já tenha se justificado ou identifique uma divergência nos registros, informe a liderança para conferência.')
   return lines.join('\n')

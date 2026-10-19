@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { adminAPI } from './admin-api.js'
+import { clanPresence } from './member-presence.js'
 import { moderationSummary, moderationMessage, punishmentListMessage } from './moderation.js'
 import WhatsAppMessage from './WhatsAppMessage.vue'
 import { moderationStatuses as statuses, moderationCSV, downloadCSV } from './admin-reports.js'
@@ -13,8 +14,8 @@ const summary = computed(() => moderationSummary(records.value))
 const decisions = computed(() => summary.value.filter(player => player.needsDecision))
 const messagePlayer=ref('')
 const punishedPlayers=computed(()=>[...new Map(records.value.filter(record=>record.kind==='punishment'&&record.status==='active'&&record.action?.trim()).map(record=>[record.playerTag,{tag:record.playerTag,name:record.playerName}])).values()])
-const punishmentMessage=computed(()=>punishmentListMessage(records.value,props.clanName,messagePlayer.value,props.phones))
-watch(()=>props.phones,()=>{copyText.value='';feedback.value='';})
+const punishmentMessage=computed(()=>punishmentListMessage(records.value,props.clanName,messagePlayer.value,props.phones,props.members))
+watch(()=>[props.phones,props.members],()=>{copyText.value='';feedback.value='';})
 watch(punishedPlayers,players=>{if(messagePlayer.value&&!players.some(player=>player.tag===messagePlayer.value))messagePlayer.value=''})
 const visible = computed(() => records.value.filter(record => {
   if (filter.value === 'dismissed') return record.status === 'dismissed'
@@ -22,6 +23,7 @@ const visible = computed(() => records.value.filter(record => {
   if (filter.value === 'pending') return record.status === 'pending'
   return filter.value === 'all' || record.kind === filter.value
 }))
+const memberPresence=tag=>clanPresence(tag,props.members)
 const url = path => path + '?clan=' + props.clanId
 async function load() {
   const data = await adminAPI(url('/api/moderation'))
@@ -61,9 +63,9 @@ async function sync() {
   await perform(async () => { const result = await adminAPI(url('/api/moderation/sync'), { method: 'POST', body: '{}' }); await load(); feedback.value = `${result.created} novo(s) aviso(s). Ocorrências existentes e removidas não são duplicadas.` })
 }
 async function copy(record) {
-  const phones=props.phones
-  const text = moderationMessage(record, props.clanName, props.phones)
-  try { await navigator.clipboard.writeText(text); if(phones===props.phones)feedback.value = 'Mensagem copiada. Cole no WhatsApp.' } catch { if(phones===props.phones){copyText.value = text; feedback.value = 'Copie a mensagem abaixo.'} }
+  const phones=props.phones,members=props.members
+  const text = moderationMessage(record, props.clanName, props.phones,memberPresence(record.playerTag))
+  try { await navigator.clipboard.writeText(text); if(phones===props.phones&&members===props.members)feedback.value = 'Mensagem copiada. Cole no WhatsApp.' } catch { if(phones===props.phones&&members===props.members){copyText.value = text; feedback.value = 'Copie a mensagem abaixo.'} }
 }
 onMounted(() => perform(load))
 </script>
@@ -82,7 +84,7 @@ onMounted(() => perform(load))
         <p v-for="problem in settings.problems" :key="problem" class="notice error">{{ problem }}</p>
         <div class="editor-actions"><button class="secondary" @click="sync">Verificar zero ataques agora</button><button class="secondary" @click="perform(load)">Atualizar histórico</button></div>
       </fieldset>
-      <section v-if="decisions.length" class="discipline-decisions"><h3>2º aviso ou mais · decidir punição</h3><p>Escolha a medida e registre a decisão. Nenhuma punição foi aplicada automaticamente.</p><div v-for="player in decisions" :key="player.tag" class="editor-actions"><strong>{{ player.name }} · {{ player.tag }} · {{ player.warnings }} avisos</strong><button class="secondary" :disabled="busy" @click="suggest(player)">Registrar punição</button></div></section>
+      <section v-if="decisions.length" class="discipline-decisions"><h3>2º aviso ou mais · decidir punição</h3><p>Escolha a medida e registre a decisão. Nenhuma punição foi aplicada automaticamente.</p><div v-for="player in decisions" :key="player.tag" class="editor-actions"><strong>{{ player.name }} · {{ player.tag }} · {{ player.warnings }} avisos</strong><span v-if="memberPresence(player.tag)===false" class="former-member-badge">Fora do clã atual</span><button class="secondary" :disabled="busy" @click="suggest(player)">Registrar punição</button></div></section>
       <form @submit.prevent="save"><fieldset :disabled="busy"><legend>{{ editing ? 'Editar registro' : 'Adicionar aviso ou punição manualmente' }}</legend>
         <label v-if="!editing">Selecionar membro <select v-model="selectedMember" @change="choosePlayer"><option value="">Preencher manualmente</option><option v-for="member in members" :key="member.tag" :value="member.tag">{{ member.name }} · {{ member.tag }}</option></select></label>
         <div class="editor-grid"><label>Jogador<input v-model="form.playerName" maxlength="100" required :readonly="form.source && form.source !== 'manual'"></label><label>Tag<input v-model="form.playerTag" maxlength="16" required placeholder="#P0Y8LQ" :readonly="form.source && form.source !== 'manual'"></label></div>
@@ -96,10 +98,10 @@ onMounted(() => perform(load))
       <div class="section"><h2>Histórico</h2><div class="editor-actions"><label>Exibir<select v-model="filter"><option value="all">Avisos e punições</option><option value="warning">Avisos</option><option value="punishment">Punições</option><option value="pending">A conferir</option><option value="dismissed">Removidos</option></select></label><button class="secondary" :disabled="busy || !visible.length" @click="downloadCSV(moderationCSV(visible, clanName), 'avisos-punicoes-cla-'+clanId+'-'+filter+'.csv')">↓ Exportar CSV (filtro)</button></div></div>
       <WhatsAppMessage title="Compartilhar lista de punições" :message="punishmentMessage" :busy="busy" empty="Nenhuma punição ativa com medida definida para compartilhar.">
         <p class="report-note">Inclui somente punições ativas deste clã, com motivo e medida definidos pela liderança. Registros a conferir, justificados, encerrados ou removidos e observações internas ficam fora da mensagem.</p>
-        <label class="message-recipient">Destinatários da mensagem de punições<select v-model="messagePlayer" :disabled="busy"><option value="">Lista completa de punições ativas</option><option v-for="player in punishedPlayers" :key="player.tag" :value="player.tag">{{ player.name }} · {{ player.tag }}</option></select></label>
+        <label class="message-recipient">Destinatários da mensagem de punições<select v-model="messagePlayer" :disabled="busy"><option value="">Lista completa de punições ativas</option><option v-for="player in punishedPlayers" :key="player.tag" :value="player.tag">{{ player.name }} · {{ player.tag }}{{ memberPresence(player.tag)===false?' · Fora do clã atual':'' }}</option></select></label>
       </WhatsAppMessage>
       <article v-for="record in visible" :key="record.id" class="moderation-record">
-        <div class="editor-actions"><h3>{{ record.playerName }} <small>{{ record.playerTag }}</small></h3><span class="badge">{{ record.kind === 'punishment' ? 'Punição' : 'Aviso' }} · {{ statuses[record.status] }}</span></div>
+        <div class="editor-actions"><h3>{{ record.playerName }} <small>{{ record.playerTag }}</small></h3><span v-if="memberPresence(record.playerTag)===false" class="former-member-badge">Fora do clã atual · histórico</span><span class="badge">{{ record.kind === 'punishment' ? 'Punição' : 'Aviso' }} · {{ statuses[record.status] }}</span></div>
         <p>{{ record.reason }}</p><p v-if="record.action"><strong>Medida:</strong> {{ record.action }}</p><p v-if="record.notes"><strong>Observações:</strong> {{ record.notes }}</p>
         <p class="report-note">{{ record.source === 'manual' ? 'Registro manual' : 'Registro automático · ' + record.source }} · {{ new Date(record.createdAt).toLocaleString('pt-BR') }}</p>
         <div class="editor-actions"><button class="secondary" :disabled="busy" @click="edit(record)">Editar / justificar</button><button class="secondary" :disabled="busy" @click="copy(record)">Copiar mensagem</button><button v-if="record.status !== 'dismissed'" class="secondary" :disabled="busy" @click="removal = record.id">Remover da lista</button></div>
