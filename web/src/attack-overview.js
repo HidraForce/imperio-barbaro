@@ -1,4 +1,5 @@
 import { entryEligibility } from './member-eligibility.js'
+import { clanPresence } from './member-presence.js'
 
 const tagKey = tag => (tag || '').replace(/^#/, '').toUpperCase()
 
@@ -22,18 +23,17 @@ function battleStatus(member, battle, loading, unavailable, fallback) {
   return attackStatus(member.attacks?.length || 0, battle.attacksPerMember || fallback, battle.state === 'warEnded')
 }
 
-export function buildAttackOverview({ members = [], raidRecord, war, leagueWar, leagueMembers = [], loading = false, leagueLoading = false, warError = '', leagueError = '', now = Date.now() }) {
+export function buildAttackOverview({ members, raidRecord, war, leagueWar, leagueMembers = [], loading = false, leagueLoading = false, warError = '', leagueError = '', now = Date.now() }) {
   const raids = new Map()
   const roster = new Set((raidRecord?.roster || []).map(m => tagKey(m.tag)))
   const warPlayers = new Map((war?.clan?.members || []).map(m => [tagKey(m.tag), m]))
   const leaguePlayers = new Map(leagueMembers.map(m => [tagKey(m.tag), m]))
   const players = new Map()
-  for (const m of [...(raidRecord?.roster || []), ...(raidRecord?.season?.members || []), ...(war?.clan?.members || []), ...leagueMembers, ...members]) {
+  for (const m of [...(raidRecord?.roster || []), ...(raidRecord?.season?.members || []), ...(war?.clan?.members || []), ...leagueMembers, ...(members||[])]) {
     players.set(tagKey(m.tag), m)
   }
   for (const m of raidRecord?.season?.members || []) raids.set(tagKey(m.tag), m)
   const raidEnded = raidRecord?.season?.state === 'ended' || parseClashDate(raidRecord?.season?.endTime) <= now
-  const current = new Set(members.map(m => tagKey(m.tag)))
   return [...players.entries()].map(([key, member]) => {
     let raid = neutral(loading ? 'Carregando…' : 'Sem dados')
     if (!loading && raidRecord) {
@@ -57,7 +57,7 @@ export function buildAttackOverview({ members = [], raidRecord, war, leagueWar, 
       const eligibility = entryEligibility(member, battle)
       if (eligibility && statuses[activity].pending) statuses[activity] = neutral(eligibility)
     }
-    return { tag: member.tag, name: member.name, current: current.has(key), statuses, pendingCount: Object.values(statuses).filter(s => s.pending).length }
+    return { tag: member.tag, name: member.name, current: clanPresence(member.tag,loading?undefined:members), statuses, pendingCount: Object.values(statuses).filter(s => s.pending).length }
   }).sort((a, b) => b.pendingCount - a.pendingCount || a.name.localeCompare(b.name, 'pt-BR'))
 }
 
