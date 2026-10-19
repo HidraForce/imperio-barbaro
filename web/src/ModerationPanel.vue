@@ -4,7 +4,7 @@ import { adminAPI } from './admin-api.js'
 import { moderationSummary, moderationMessage, punishmentListMessage } from './moderation.js'
 import WhatsAppMessage from './WhatsAppMessage.vue'
 import { moderationStatuses as statuses, moderationCSV, downloadCSV } from './admin-reports.js'
-const props = defineProps({ clanId: String, clanName: String, members: Array })
+const props = defineProps({ clanId: String, clanName: String, members: Array, phones:{type:Object,default:()=>({})} })
 const emit = defineEmits(['changed'])
 const records = ref([]), settings = ref(null), busy = ref(false), loaded = ref(false), error = ref(''), feedback = ref(''), filter = ref('all'), editing = ref(null), removal = ref(null), copyText = ref('')
 const empty = () => ({ playerTag: '', playerName: '', kind: 'warning', status: 'active', reason: '', action: '', notes: '' })
@@ -13,7 +13,8 @@ const summary = computed(() => moderationSummary(records.value))
 const decisions = computed(() => summary.value.filter(player => player.needsDecision))
 const messagePlayer=ref('')
 const punishedPlayers=computed(()=>[...new Map(records.value.filter(record=>record.kind==='punishment'&&record.status==='active'&&record.action?.trim()).map(record=>[record.playerTag,{tag:record.playerTag,name:record.playerName}])).values()])
-const punishmentMessage=computed(()=>punishmentListMessage(records.value,props.clanName,messagePlayer.value))
+const punishmentMessage=computed(()=>punishmentListMessage(records.value,props.clanName,messagePlayer.value,props.phones))
+watch(()=>props.phones,()=>{copyText.value='';feedback.value='';})
 watch(punishedPlayers,players=>{if(messagePlayer.value&&!players.some(player=>player.tag===messagePlayer.value))messagePlayer.value=''})
 const visible = computed(() => records.value.filter(record => {
   if (filter.value === 'dismissed') return record.status === 'dismissed'
@@ -60,8 +61,9 @@ async function sync() {
   await perform(async () => { const result = await adminAPI(url('/api/moderation/sync'), { method: 'POST', body: '{}' }); await load(); feedback.value = `${result.created} novo(s) aviso(s). Ocorrências existentes e removidas não são duplicadas.` })
 }
 async function copy(record) {
-  const text = moderationMessage(record, props.clanName)
-  try { await navigator.clipboard.writeText(text); feedback.value = 'Mensagem copiada. Cole no WhatsApp.' } catch { copyText.value = text; feedback.value = 'Copie a mensagem abaixo.' }
+  const phones=props.phones
+  const text = moderationMessage(record, props.clanName, props.phones)
+  try { await navigator.clipboard.writeText(text); if(phones===props.phones)feedback.value = 'Mensagem copiada. Cole no WhatsApp.' } catch { if(phones===props.phones){copyText.value = text; feedback.value = 'Copie a mensagem abaixo.'} }
 }
 onMounted(() => perform(load))
 </script>

@@ -1,6 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createContactVault } from './contact-vault.js'
+import { computed } from 'vue'
+import { contactPhoneIndex } from './contact-numbers.js'
 
 const json = (value, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } })
 const session = () => ({ token: 'token-de-teste', expiresAt: new Date(Date.now() + 600000).toISOString() })
@@ -121,4 +123,42 @@ test('Edição copia as contas e salva uma pessoa com contas nos dois clãs', as
   assert.deepEqual(saved.accounts.map(a => a.clanId), ['1', '2'])
   assert.equal(vault.showForm.value, false)
   vault.lock()
+})
+
+test('Shared number access expires and clears message phones; late refresh cannot restore them',async t=>{
+  t.mock.timers.enable({apis:['setTimeout']})
+  let refreshing=false,resolveRefresh
+  const person={phone:'5511999991234',accounts:[{playerTag:'#PYQ'}]}
+  const vault=createContactVault(async(path,options)=>{
+    if(path.endsWith('/unlock'))return json(session())
+    if(options.method==='DELETE')return new Response(null,{status:204})
+    if(refreshing)return new Promise(resolve=>{resolveRefresh=resolve})
+    return json([person])
+  })
+  const phones=computed(()=>vault.unlocked.value?contactPhoneIndex(vault.contacts.value):{})
+  assert.deepEqual(phones.value,{})
+  vault.password.value='test'
+  await vault.unlock()
+  assert.equal(phones.value['#PYQ'],'5511999991234')
+  refreshing=true
+  const pending=vault.refresh()
+  while(!resolveRefresh)await new Promise(resolve=>setImmediate(resolve))
+  t.mock.timers.tick(600001)
+  assert.deepEqual(phones.value,{})
+  resolveRefresh(json([person]))
+  await pending
+  assert.deepEqual(phones.value,{})
+  assert.deepEqual(vault.contacts.value,[])
+})
+
+test('Expired contact session during refresh removes phones rather than retaining stale data',async()=>{
+  let expired=false
+  const vault=createContactVault(async(path,options)=>{
+    if(path.endsWith('/unlock'))return json(session())
+    if(options.method==='DELETE')return new Response(null,{status:204})
+    return expired?json({error:'Expired'},423):json([{phone:'5511999991234',accounts:[{playerTag:'#PYQ'}]}])
+  })
+  vault.password.value='test';await vault.unlock();expired=true;await vault.refresh()
+  assert.equal(vault.unlocked.value,false)
+  assert.deepEqual(vault.contacts.value,[])
 })
