@@ -1,11 +1,12 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, inject, onMounted, onUnmounted, ref, watch } from 'vue'
 import { createContactVault } from './contact-vault.js'
 import { loadContactMembers, contactMemberOptions, accountMemberOptions, selectContactMember } from './contact-members.js'
 import UiIcon from './UiIcon.vue'
 
 const props = defineProps({ configured: Boolean, loading: Boolean, clans: {type:Array,default:()=>[]}, members: {type:Array,default:()=>[]}, selectedClan: String })
-const { contacts, form, password, unlocked, busy, error, showForm, unlock, lock, save, remove, startNew, edit, addAccount, removeAccount, merge } = createContactVault()
+const sharedVault=inject('contactVault',null)
+const { contacts, form, password, unlocked, busy, error, showForm, unlock, lock, save, remove, startNew, edit, addAccount, removeAccount, merge } = sharedVault||createContactVault()
 const mergeTarget=ref(''), mergeSource=ref('')
 const memberLists=ref({}), membersLoading=ref(false), membersError=ref(''), manualAccounts=ref(new Set())
 const memberChoices=computed(()=>contactMemberOptions(props.clans,memberLists.value))
@@ -38,9 +39,9 @@ function clanLabel(id){const clan=props.clans.find(c=>c.id===id);return id?'Clã
 const whats = phone => 'https://wa.me/' + phone.replace(/\D/g, '')
 function hidden() { if (document.hidden) lock() }
 function leaving() { lock() }
-watch(() => props.loading, value => { if (value) lock() })
-onMounted(() => { document.addEventListener('visibilitychange', hidden); window.addEventListener('pagehide', leaving) })
-onUnmounted(() => { document.removeEventListener('visibilitychange', hidden); window.removeEventListener('pagehide', leaving); lock() })
+watch(() => props.loading, value => { if (value&&!sharedVault) lock() })
+onMounted(() => { if(!sharedVault){document.addEventListener('visibilitychange', hidden); window.addEventListener('pagehide', leaving)} })
+onUnmounted(() => { if(!sharedVault){document.removeEventListener('visibilitychange', hidden); window.removeEventListener('pagehide', leaving); lock()} })
 </script>
 <template>
   <p v-if="loading" class="loading">Carregando configuração dos contatos…</p>
@@ -48,7 +49,7 @@ onUnmounted(() => { document.removeEventListener('visibilitychange', hidden); wi
     <UiIcon name="Shield"/>
     <small>ACESSO RESTRITO</small>
     <h2>Contatos protegidos</h2>
-    <p>Informe a senha exclusiva dos contatos. O acesso dura até 10 minutos e é bloqueado ao sair desta área ou ocultar a aba.</p>
+    <p>Informe a senha exclusiva dos contatos. O acesso dura até 10 minutos e permite incluir os números nas mensagens das outras abas. Ocultar ou sair da página bloqueia os contatos.</p>
     <div v-if="!configured" class="notice">A proteção ainda não foi configurada. Defina <code>CONTACTS_PASSWORD</code> no servidor para habilitar esta área.</div>
     <form v-else @submit.prevent="unlock">
       <label for="contacts-password">Senha dos contatos</label>

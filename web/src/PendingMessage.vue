@@ -1,12 +1,12 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { filterBattleWarnings, pendingMessage } from './battle-report.js'
-const props=defineProps({clanName:String,clanTag:String,items:{type:Array,default:()=>[]},busy:Boolean,context:String,warMode:Boolean})
+const props=defineProps({clanName:String,clanTag:String,items:{type:Array,default:()=>[]},busy:Boolean,context:String,warMode:Boolean,phones:{type:Object,default:()=>({})}})
 const player=ref(''),attackFilter=ref('all'),copyStatus=ref(''),messageField=ref(null)
 const warningCounts=computed(()=>Object.fromEntries(['all','0','1'].map(filter=>[filter,new Set(filterBattleWarnings(props.items,filter).map(item=>item.tag)).size])))
 const filteredItems=computed(()=>props.warMode?filterBattleWarnings(props.items,attackFilter.value):props.items)
 const people=computed(()=>[...new Map(filteredItems.value.map(item=>[item.tag,{tag:item.tag,name:item.name}])).values()].sort((a,b)=>a.name.localeCompare(b.name,'pt-BR')))
-const message=computed(()=>pendingMessage({clanName:props.clanName,clanTag:props.clanTag,items:filteredItems.value,playerTag:player.value}))
+const message=computed(()=>pendingMessage({clanName:props.clanName,clanTag:props.clanTag,items:filteredItems.value,playerTag:player.value,phones:props.phones}))
 watch(()=>[props.clanTag,props.context,props.warMode],()=>{player.value='';attackFilter.value='all';copyStatus.value=''})
 watch(attackFilter,()=>{player.value='';copyStatus.value=''})
 watch(people,()=>{if(player.value&&!people.value.some(p=>p.tag===player.value))player.value=''})

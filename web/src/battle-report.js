@@ -1,5 +1,6 @@
 import { csvCell } from './report-csv.js'
 import { entryEligibility } from './member-eligibility.js'
+import { playerMessageLabel } from './contact-numbers.js'
 
 const tagKey = tag => String(tag || '').replace(/^#/, '').toUpperCase()
 export function ownSide(war, clanTag) {
@@ -69,12 +70,12 @@ export function raidPending(record, now = Date.now(), members = []) {
     return [{tag:member.tag,name:member.name,activity:'Raids · '+String(season.startTime||'').slice(0,8),used,limit,ended,verify:!attacker||!record.rosterDuringRaid}]
   })
 }
-export function pendingMessage({clanName,clanTag,items,playerTag=''}) {
+export function pendingMessage({clanName,clanTag,items,playerTag='',phones={}}) {
   const chosen = items.filter(item=>!playerTag||tagKey(item.tag)===tagKey(playerTag))
   if (!chosen.length) return ''
   const closed = chosen.filter(item=>item.ended), active = chosen.filter(item=>!item.ended)
-  const lines = [`*${clanName || 'Clã'} · #${tagKey(clanTag)}*`, playerTag ? `*Atenção, ${chosen[0].name} (${chosen[0].tag})*` : '*Aviso de pendências de ataques*', '']
-  const line = item => `• ${item.name} (${item.tag}) — ${item.activity}: ${item.used}${item.limit==null?' ataques registrados':'/'+item.limit+' ataques usados'}.`
+  const lines = [`*${clanName || 'Clã'} · #${tagKey(clanTag)}*`, playerTag ? `*Atenção, ${playerMessageLabel(chosen[0].name,chosen[0].tag,phones)}*` : '*Aviso de pendências de ataques*', '']
+  const line = item => `• ${playerMessageLabel(item.name,item.tag,phones)} — ${item.activity}: ${item.used}${item.limit==null?' ataques registrados':'/'+item.limit+' ataques usados'}.`
   if (closed.length) lines.push('*Atividades encerradas — justificativa necessária*',...closed.map(line),'','Quem consta acima deve apresentar uma justificativa à liderança pela inadimplência nos ataques. Sem justificativa, ficará sob aviso.','')
   if (active.length) lines.push('*Atividades em andamento*',...active.map(line),'','O prazo ainda está aberto. Realize os ataques restantes antes do encerramento; se houver algum impedimento, avise a liderança.','')
   if (chosen.some(item=>item.verify)) lines.push('Nas raids, confirme a elegibilidade e eventual participação em outro clã com a liderança antes de aplicar o aviso.','')

@@ -40,6 +40,7 @@ func adminTestRouter(a *app) http.Handler {
 	r.Put("/api/moderation/{id}", a.saveModeration)
 	r.Put("/api/moderation-settings", a.saveModerationSettings)
 	r.Post("/api/moderation/sync", a.syncModeration)
+	r.Get("/api/contacts/coverage", a.contactCoverage)
 	guard := newAccessGuard("leader", "private-admin-test-password")
 	return secureHeaders(a.publicContent(publicHome(a.staticFS, guard.middleware(sameOriginAPI(r)), a.renderHome)))
 }

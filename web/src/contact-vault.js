@@ -83,11 +83,23 @@ export function createContactVault(fetcher = (...args) => fetch(...args)) {
     } finally { if (current === generation) busy.value = false }
   }
 
+  async function refresh() {
+    if (!unlocked.value || busy.value) return
+    const current = generation
+    busy.value = true
+    try {
+      const items = await request('/api/contacts')
+      if (current === generation) contacts.value = items
+    } catch (failure) {
+      if (current === generation) lock(failure.message)
+    } finally { if (current === generation) busy.value = false }
+  }
+
   function startNew() { if (!unlocked.value||busy.value) return; form.value=emptyForm();showForm.value=true;error.value='' }
   function edit(contact) { if (!unlocked.value||busy.value) return; form.value={id:contact.id,realName:contact.realName,phone:contact.phone,notes:contact.notes,accounts:contact.accounts.map(account=>({...account}))};showForm.value=true;error.value='' }
   function addAccount() { if (form.value.accounts.length<20) form.value.accounts.push(emptyAccount()) }
   function removeAccount(index) { if(form.value.accounts.length>1) form.value.accounts.splice(index,1) }
-  return { contacts, form, password, unlocked, busy, error, showForm, unlock, lock, startNew, edit, addAccount, removeAccount,
+  return { contacts, form, password, unlocked, busy, error, showForm, unlock, lock, refresh, startNew, edit, addAccount, removeAccount,
     merge: (targetId,sourceId) => change('/api/contacts/merge', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({targetId:Number(targetId),sourceId:Number(sourceId)})}),
     save: () => change('/api/contacts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form.value) }),
     remove: id => change('/api/contacts/' + id, { method: 'DELETE' }),

@@ -128,6 +128,7 @@ func main() {
 	r.Get("/api/raids", a.raids)
 	r.Get("/api/cwl", a.cwl)
 	r.Get("/api/cwl/round", a.cwlRound)
+	r.Get("/api/contacts/coverage", a.contactCoverage)
 	r.Post("/api/contacts/unlock", a.contactsVault.unlock)
 	r.Delete("/api/contacts/session", a.contactsVault.lock)
 	r.Group(func(r chi.Router) {
