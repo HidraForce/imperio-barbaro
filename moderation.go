@@ -21,6 +21,8 @@ type moderationRecord struct {
 	PlayerTag  string `json:"playerTag"`
 	PlayerName string `json:"playerName"`
 	Kind       string `json:"kind"`
+	Sector     string `json:"sector"`
+	Sanction   string `json:"sanction"`
 	Status     string `json:"status"`
 	Reason     string `json:"reason"`
 	Action     string `json:"action"`
@@ -31,6 +33,9 @@ type moderationRecord struct {
 	EventEnd   string `json:"eventEnd,omitempty"`
 	CreatedAt  string `json:"createdAt"`
 	UpdatedAt  string `json:"updatedAt"`
+	IssuedAt   string `json:"issuedAt,omitempty"`
+	AppliedAt  string `json:"appliedAt,omitempty"`
+	ExpiresAt  string `json:"expiresAt,omitempty"`
 }
 type moderationSettings struct {
 	Revision  int64    `json:"revision"`
@@ -87,10 +92,17 @@ func (a *app) moderation(w http.ResponseWriter, r *http.Request) {
 		jsonResponse(w, 500, map[string]string{"error": "Não foi possível ler a configuração dos avisos."})
 		return
 	}
-	rows, err := a.db.QueryContext(r.Context(), `SELECT revision,payload FROM moderation_records WHERE clan_tag=? ORDER BY created_at DESC,id`, tag)
+	records, err := readModerationRecords(r.Context(), a.db, tag)
 	if err != nil {
 		jsonResponse(w, 500, map[string]string{"error": "Não foi possível carregar o histórico."})
 		return
+	}
+	jsonResponse(w, 200, map[string]any{"items": evaluateModeration(records, time.Now().UTC()), "settings": settings})
+}
+func readModerationRecords(ctx context.Context, db *database, tag string) ([]moderationRecord, error) {
+	rows, err := db.QueryContext(ctx, `SELECT revision,payload FROM moderation_records WHERE clan_tag=? ORDER BY created_at DESC,id`, tag)
+	if err != nil {
+		return nil, err
 	}
 	defer rows.Close()
 	records := []moderationRecord{}
@@ -107,16 +119,21 @@ func (a *app) moderation(w http.ResponseWriter, r *http.Request) {
 		record.Revision = revision
 		records = append(records, record)
 	}
-	if err != nil || rows.Err() != nil {
-		jsonResponse(w, 500, map[string]string{"error": "Não foi possível ler o histórico completo."})
-		return
+	if err != nil {
+		return nil, err
 	}
-	jsonResponse(w, 200, map[string]any{"items": records, "settings": settings})
+	return records, rows.Err()
 }
 func validModerationRecord(record *moderationRecord) bool {
 	record.PlayerTag = "#" + normalizeTag(strings.TrimSpace(record.PlayerTag))
 	record.PlayerName = strings.TrimSpace(record.PlayerName)
 	record.Reason = strings.TrimSpace(record.Reason)
+	if record.Sector == "" {
+		record.Sector = automaticSector(record.Source)
+	}
+	if record.Sector != "" && !validModerationSector(record.Sector) {
+		return false
+	}
 	return playerTagPattern.MatchString(record.PlayerTag) && validAdminText(record.PlayerName, 100, true) && validAdminText(record.Reason, 1500, true) && validAdminText(record.Action, 500, record.Kind == "punishment") && validAdminText(record.Notes, 2000, false) && (record.Kind == "warning" || record.Kind == "punishment") && (record.Status == "pending" || record.Status == "active" || record.Status == "justified" || record.Status == "resolved" || record.Status == "dismissed")
 }
 func insertModeration(ctx context.Context, db *database, tag string, record *moderationRecord) (bool, error) {
@@ -128,6 +145,9 @@ func insertModeration(ctx context.Context, db *database, tag string, record *mod
 	record.Revision = 1
 	record.CreatedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	record.UpdatedAt = record.CreatedAt
+	if record.Kind == "warning" && record.Status == "active" {
+		record.IssuedAt = record.CreatedAt
+	}
 	key := record.EventKey
 	if key == "" {
 		key = "manual:" + record.ID
@@ -150,6 +170,8 @@ func (a *app) saveModeration(w http.ResponseWriter, r *http.Request) {
 		PlayerTag  string `json:"playerTag"`
 		PlayerName string `json:"playerName"`
 		Kind       string `json:"kind"`
+		Sector     string `json:"sector"`
+		Sanction   string `json:"sanction"`
 		Status     string `json:"status"`
 		Reason     string `json:"reason"`
 		Action     string `json:"action"`
@@ -158,13 +180,19 @@ func (a *app) saveModeration(w http.ResponseWriter, r *http.Request) {
 	if !decodeAdminJSON(w, r, &input) {
 		return
 	}
-	record := moderationRecord{Revision: input.Revision, PlayerTag: input.PlayerTag, PlayerName: input.PlayerName, Kind: input.Kind, Status: input.Status, Reason: input.Reason, Action: input.Action, Notes: input.Notes, Source: "manual"}
+	record := moderationRecord{Revision: input.Revision, PlayerTag: input.PlayerTag, PlayerName: input.PlayerName, Kind: input.Kind, Sector: input.Sector, Sanction: input.Sanction, Status: input.Status, Reason: input.Reason, Action: input.Action, Notes: input.Notes, Source: "manual"}
+	if action, ok := moderationSanctions[record.Sanction]; ok && record.Kind == "punishment" {
+		record.Action = action
+	}
 	if !validModerationRecord(&record) {
 		jsonResponse(w, 400, map[string]string{"error": "Informe jogador, tag, motivo e situação válidos. Punições precisam da medida definida pela liderança."})
 		return
 	}
 	id := chi.URLParam(r, "id")
 	if id == "" {
+		if !a.validateModerationPolicy(w, r, tag, &record, nil) {
+			return
+		}
 		if _, err := insertModeration(r.Context(), a.db, tag, &record); err != nil {
 			jsonResponse(w, 500, map[string]string{"error": "Não foi possível registrar o aviso."})
 			return
@@ -189,8 +217,21 @@ func (a *app) saveModeration(w http.ResponseWriter, r *http.Request) {
 	record.EventEnd = saved.EventEnd
 	record.CreatedAt = saved.CreatedAt
 	record.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
-	if saved.Source != "manual" && (saved.PlayerTag != record.PlayerTag || saved.PlayerName != record.PlayerName || saved.Reason != record.Reason) {
+	record.IssuedAt, record.AppliedAt = saved.IssuedAt, saved.AppliedAt
+	if record.Kind == "warning" && record.Status == "active" && record.IssuedAt == "" {
+		record.IssuedAt = saved.CreatedAt
+		if saved.Status == "pending" {
+			record.IssuedAt = record.UpdatedAt
+		}
+	}
+	if record.Sector == "" {
+		record.Sector = automaticSector(saved.Source)
+	}
+	if saved.Source != "manual" && (saved.PlayerTag != record.PlayerTag || saved.PlayerName != record.PlayerName || saved.Reason != record.Reason || saved.Kind != record.Kind || record.Sector != automaticSector(saved.Source)) {
 		jsonResponse(w, 400, map[string]string{"error": "A evidência automática é preservada. Use observações para registrar correções e justificativas."})
+		return
+	}
+	if !a.validateModerationPolicy(w, r, tag, &record, &saved) {
 		return
 	}
 	payloadBytes, _ := json.Marshal(record)
