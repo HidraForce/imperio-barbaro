@@ -21,6 +21,13 @@ test('Discipline CSV preserves status, decisions, event dates, multiline reasons
   assert.ok(output.includes('"20261010T070000.000Z","20261011T070000.000Z"'))
 })
 
+test('Discipline CSV exports sector and expiration without counting expired warnings as active', () => {
+  const output = moderationCSV([{ playerName: 'Jogador', playerTag: '#PYQ', kind: 'warning', status: 'active', sector: 'games', expiresAt: '2020-01-30T12:00:00Z' }], 'Clã')
+  assert.match(output, /Expirado/)
+  assert.match(output, /Jogos/)
+  assert.match(output, /2020-01-30T12:00:00Z/)
+})
+
 test('Recent arrivals are neutral in overview and excluded from accusatory messages', () => {
   const member = {tag:'#PYQ',name:'Novo',membership:{detectedJoin:true,newMember:true,joinAfter:'2026-10-12T07:00:00Z',firstSeen:'2026-10-13T07:00:00Z'}}
   const event = {state:'warEnded',startTime:'20261010T070000.000Z',endTime:'20261012T070000.000Z',clan:{tag:'#CLAN',members:[member]}}

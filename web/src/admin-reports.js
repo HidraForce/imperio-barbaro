@@ -1,6 +1,7 @@
+import { moderationStatus, moderationSector, moderationSectors } from './moderation.js'
 import { csvCell } from './report-csv.js'
 
-export const moderationStatuses = { pending: 'A conferir', active: 'Ativo', justified: 'Justificado', resolved: 'Encerrado', dismissed: 'Removido' }
+export const moderationStatuses = { pending: 'A conferir', active: 'Ativo', justified: 'Justificado', resolved: 'Encerrado', dismissed: 'Removido', expired: 'Expirado' }
 export function roleLabel(role) { return ({leader:'Líder',coLeader:'Colíder',admin:'Ancião',member:'Membro'})[role] || 'Membro' }
 const csv = rows => '\uFEFF' + rows.map(row => row.map(csvCell).join(',')).join('\r\n')
 
@@ -20,8 +21,8 @@ export function membersCSV(members, clanName) {
 
 export function moderationCSV(records, clanName) {
   return csv([
-    ['Clã','Jogador','Tag','Lista','Situação','Motivo','Medida','Observações','Origem','Início do evento (UTC)','Fim do evento (UTC)','Criado em (UTC)','Atualizado em (UTC)'],
-    ...records.map(r => [clanName,r.playerName,r.playerTag,r.kind === 'punishment' ? 'Punição' : 'Aviso',moderationStatuses[r.status] || r.status,r.reason,r.action,r.notes,({manual:'Manual',war:'Guerra',cwl:'CWL',raids:'Raids'})[r.source] || r.source,r.eventStart,r.eventEnd,r.createdAt,r.updatedAt]),
+    ['Clã','Jogador','Tag','Lista','Situação','Motivo','Medida','Observações','Origem','Início do evento (UTC)','Fim do evento (UTC)','Criado em (UTC)','Atualizado em (UTC)','Setor','Expira em (UTC)','Aviso confirmado em (UTC)','Punição aplicada em (UTC)'],
+    ...records.map(r => [clanName,r.playerName,r.playerTag,r.kind === 'punishment' ? 'Punição' : 'Aviso',moderationStatuses[moderationStatus(r)] || r.status,r.reason,r.action,r.notes,({manual:'Manual',war:'Guerra',cwl:'CWL',raids:'Raids'})[r.source] || r.source,r.eventStart,r.eventEnd,r.createdAt,r.updatedAt,moderationSectors[moderationSector(r)] || 'A definir',r.expiresAt,r.issuedAt,r.appliedAt]),
   ])
 }
 

@@ -1,7 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { moderationSummary, moderationLabel, moderationMessage, punishmentListMessage } from './moderation.js'
-const warning = overrides => ({ playerTag: '#P0Y8LQ', playerName: 'Jogador', kind: 'warning', status: 'active', reason: 'Zero ataques na guerra.', ...overrides })
+import { moderationSummary, moderationLabel, moderationStatus, moderationMessage, punishmentListMessage } from './moderation.js'
+const now = Date.now()
+const warning = overrides => ({ playerTag: '#P0Y8LQ', playerName: 'Jogador', kind: 'warning', status: 'active', sector: 'wars', createdAt: new Date(now).toISOString(), expiresAt: new Date(now + 30*86400000).toISOString(), reason: 'Zero ataques na guerra.', ...overrides })
 test('Primeiro aviso acompanha cooperação; segundo solicita decisão sem aplicar punição', () => {
   const [first] = moderationSummary([warning()])
   assert.equal(first.warnings, 1); assert.equal(first.needsDecision, false)
@@ -51,4 +52,59 @@ test('Individual punishment selection keeps different accounts separate and mark
   const removed=moderationMessage(warning({status:'dismissed'}),'Meu clã')
   assert.match(removed,/Situação: Removido/)
   assert.ok(!removed.includes('Uma segunda ocorrência'))
+})
+
+test('Degrees add different sectors but expulsion requires one sector with four or all four sectors', () => {
+  for (const [sectors, degree] of [
+    [['wars', 'capital'], 2],
+    [['wars', 'capital', 'games'], 3],
+    [['wars', 'wars', 'capital', 'capital'], 3],
+    [['wars', 'wars', 'capital', 'games'], 3],
+    [['wars', 'wars', 'wars', 'wars'], 4],
+    [['wars', 'capital', 'games', 'replays'], 4],
+  ]) {
+    const [player] = moderationSummary(sectors.map(sector => warning({ sector })), now)
+    assert.equal(player.degree, degree)
+    assert.equal(player.needsDecision, true)
+    assert.equal(player.warnings, sectors.length)
+  }
+})
+
+test('An existing lesser punishment cannot hide a newly reached expulsion degree', () => {
+  const records = ['wars', 'capital', 'games', 'replays'].map(sector => warning({ sector }))
+  records.push(warning({ kind: 'punishment', sanction: 'two_wars', action: 'Fora de duas guerras.' }))
+  let [player] = moderationSummary(records, now)
+  assert.equal(player.needsDecision, true)
+  assert.match(moderationLabel(player), /Grau 4.*registrar expulsão/)
+  records.push(warning({ kind: 'punishment', sanction: 'expulsion', action: 'Expulsão do clã.' }))
+  ;[player] = moderationSummary(records, now)
+  assert.equal(player.needsDecision, false)
+  assert.match(moderationLabel(player), /Expulsão registrada/)
+})
+
+test('Expired warnings disappear from degrees at the boundary but remain in messages as history', () => {
+  const expired = warning({ expiresAt: new Date(now).toISOString() })
+  assert.equal(moderationStatus(expired, now - 1), 'active')
+  assert.equal(moderationStatus(expired, now), 'expired')
+  assert.deepEqual(moderationSummary([expired], now), [])
+  const message = moderationMessage(expired, 'Meu clã')
+  assert.match(message, /Situação: Expirado/)
+  assert.match(message, /Não conta para punições/)
+  assert.ok(!message.includes('2º aviso:'))
+  const [player] = moderationSummary([expired, warning({ sector: 'games' })], now)
+  assert.equal(player.degree, 1)
+})
+
+test('Legacy unclassified warnings need review and previous-cycle punishments do not cover new warnings', () => {
+  const [legacy] = moderationSummary([warning({ sector: '', source: 'manual' })], now)
+  assert.equal(legacy.warnings, 0)
+  assert.equal(legacy.pending, 1)
+  const [player] = moderationSummary([warning(), warning({ sector: 'capital' }), warning({ kind: 'punishment', sanction: 'two_wars', createdAt: new Date(now - 40*86400000).toISOString() })], now)
+  assert.equal(player.needsDecision, true)
+})
+
+test('A punishment activated after pending review covers the current warning cycle', () => {
+  const decision = warning({ kind: 'punishment', sanction: 'two_wars', createdAt: new Date(now - 40*86400000).toISOString(), appliedAt: new Date(now).toISOString() })
+  const [player] = moderationSummary([warning(), warning({ sector: 'capital' }), decision], now)
+  assert.equal(player.needsDecision, false)
 })

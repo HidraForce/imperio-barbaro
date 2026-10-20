@@ -117,11 +117,19 @@ func TestManualWarningsPunishmentsAndAutomationSettings(t *testing.T) {
 	if res := adminTestRequest(handler, "POST", "https://dashboard.imperiobarbaro.com.br/api/moderation?clan=1", record, true); res.Code != 400 {
 		t.Fatal("punishment without decision accepted")
 	}
-	record["action"] = "Fora das próximas duas guerras."
+	record["sanction"] = "two_wars"
+	for _, sector := range []string{"wars", "capital"} {
+		warning := map[string]any{"playerTag": "#P0Y8LQ", "playerName": "Jogador", "kind": "warning", "sector": sector, "status": "active", "reason": "Aviso confirmado."}
+		if res := adminTestRequest(handler, "POST", "https://dashboard.imperiobarbaro.com.br/api/moderation?clan=1", warning, true); res.Code != 201 {
+			t.Fatal(res.Code, res.Body.String())
+		}
+	}
 	if res := adminTestRequest(handler, "POST", "https://dashboard.imperiobarbaro.com.br/api/moderation?clan=1", record, true); res.Code != 201 {
 		t.Fatal(res.Code, res.Body.String())
 	}
 	record["kind"] = "warning"
+	record["sector"] = "games"
+	record["sanction"] = ""
 	record["action"] = ""
 	if res := adminTestRequest(handler, "POST", "https://dashboard.imperiobarbaro.com.br/api/moderation?clan=2", record, true); res.Code != 201 {
 		t.Fatal(res.Code, res.Body.String())
