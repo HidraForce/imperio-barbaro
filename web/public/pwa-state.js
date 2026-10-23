@@ -1,8 +1,10 @@
-export function memberSetup({ios,installed,supported,permission,subscribed}) {
+export function memberSetup({ios,installed,supported,permission,subscribed,verificationFailed=false}) {
  if(ios&&!installed)return 'install-first'
  if(!supported)return 'unsupported'
  if(permission==='denied')return 'blocked'
- if(permission!=='granted'||!subscribed)return 'enable'
+ if(permission!=='granted')return 'enable'
+ if(verificationFailed)return 'retry'
+ if(!subscribed)return 'enable'
  return installed?'ready':'install'
 }
 
