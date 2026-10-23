@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/pbkdf2"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -22,6 +23,7 @@ type contactVault struct {
 	mu                     sync.Mutex
 	configured             bool
 	password               [32]byte
+	salt                   [16]byte
 	sessions               map[[32]byte]time.Time
 	failures               map[string]failedAccess
 	now                    func() time.Time
@@ -33,7 +35,25 @@ func newContactVault(password string) *contactVault {
 
 // Each capability has its own header, session namespace and attempt budget.
 func newScopedVault(password, scope, header, envName string) *contactVault {
-	return &contactVault{scope: scope, header: header, envName: envName, configured: validCredentials("protegido", password), password: sha256.Sum256([]byte(password)), sessions: make(map[[32]byte]time.Time), failures: make(map[string]failedAccess), now: time.Now}
+	v := &contactVault{scope: scope, header: header, envName: envName, configured: validCredentials("protegido", password), sessions: make(map[[32]byte]time.Time), failures: make(map[string]failedAccess), now: time.Now}
+	if _, err := rand.Read(v.salt[:]); err != nil {
+		panic(err)
+	}
+	if v.configured {
+		v.password = v.derivePassword(password)
+	}
+	return v
+}
+
+// PBKDF2 protects password-derived keys; SHA-256 below only hashes random tokens.
+func (v *contactVault) derivePassword(value string) [32]byte {
+	key, err := pbkdf2.Key(sha256.New, value, v.salt[:], 600000, 32)
+	if err != nil {
+		panic(err)
+	} // Fixed, valid KDF parameters.
+	var result [32]byte
+	copy(result[:], key)
+	return result
 }
 
 func (v *contactVault) prune(now time.Time) {
@@ -85,7 +105,7 @@ func (v *contactVault) unlock(w http.ResponseWriter, r *http.Request) {
 		securityError(w, 429, "Muitas tentativas de desbloqueio. Aguarde cinco minutos.")
 		return
 	}
-	guess := sha256.Sum256([]byte(input.Password))
+	guess := v.derivePassword(input.Password)
 	if subtle.ConstantTimeCompare(guess[:], v.password[:]) != 1 {
 		if entry.count == 0 {
 			if len(v.failures) >= 2048 {

@@ -30,7 +30,9 @@ func notificationTestApp(t *testing.T) (*app, http.Handler) {
 	r := chi.NewRouter()
 	r.Get("/api/announcements", a.announcementStatus)
 	r.Post("/api/announcements", a.sendAnnouncement)
-	a.initAnnouncementAccess("custom-test-private-password", "timer-test-private-password")
+	if err := a.initAnnouncementAccess("custom-test-private-password", "timer-test-private-password"); err != nil {
+		t.Fatal(err)
+	}
 	a.announcementAccessRoutes(r)
 	guard := newAccessGuard("leader", "private-admin-test-password")
 	return a, secureHeaders(a.publicPush(publicHome(a.staticFS, guard.middleware(sameOriginAPI(r)))))

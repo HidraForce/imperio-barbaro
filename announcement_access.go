@@ -6,13 +6,18 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-func (a *app) initAnnouncementAccess(customPassword, timerPassword string) {
+func (a *app) initAnnouncementAccess(customPassword, timerPassword string) error {
 	a.customVault = newScopedVault(customPassword, "notifications", "X-Notifications-Session", "NOTIFICATIONS_PASSWORD")
 	a.timerVault = newScopedVault(timerPassword, "super-notifications", "X-Super-Notifications-Session", "SUPER_NOTIFICATIONS_PASSWORD")
 	if a.db.postgres {
-		a.customVault.store = a.db
-		a.timerVault.store = a.db
+		if err := a.customVault.useSharedStore(a.db, customPassword); err != nil {
+			return err
+		}
+		if err := a.timerVault.useSharedStore(a.db, timerPassword); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 func (a *app) announcementAccessRoutes(r chi.Router) {

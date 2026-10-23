@@ -10,6 +10,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -103,8 +104,43 @@ func (g *accessGuard) sharedAccess(w http.ResponseWriter, r *http.Request, next 
 	}
 	next.ServeHTTP(w, r)
 }
+
+// Persist the random salt so independently started PostgreSQL processes derive
+// the same capability key. Only salts and token hashes are stored, never passwords.
+func (v *contactVault) useSharedStore(db *database, password string) error {
+	ctx := context.Background()
+	tx, err := securityTransaction(ctx, db)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err = tx.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS vault_salts(scope TEXT PRIMARY KEY,salt TEXT NOT NULL)`); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, `INSERT INTO vault_salts(scope,salt) VALUES(?,?) ON CONFLICT(scope) DO NOTHING`, v.scope, hex.EncodeToString(v.salt[:])); err != nil {
+		return err
+	}
+	var value string
+	if err = tx.QueryRowContext(ctx, `SELECT salt FROM vault_salts WHERE scope=?`, v.scope).Scan(&value); err != nil {
+		return err
+	}
+	salt, err := hex.DecodeString(value)
+	if err != nil || len(salt) != len(v.salt) {
+		return fmt.Errorf("invalid salt for vault %s", v.scope)
+	}
+	if err = tx.Commit(); err != nil {
+		return err
+	}
+	copy(v.salt[:], salt)
+	if v.configured {
+		v.password = v.derivePassword(password)
+	}
+	v.store = db
+	return nil
+}
+
 func (v *contactVault) unlockShared(w http.ResponseWriter, r *http.Request, password, ip string) {
-	guess := sha256.Sum256([]byte(password))
+	guess := v.derivePassword(password)
 	valid := subtle.ConstantTimeCompare(guess[:], v.password[:]) == 1
 	now := v.now()
 	until, err := sharedAttempt(r.Context(), v.store, privateStateKey(v.scope+"-fail:", v.password, ip), v.scope+"-fail:", !valid, 5, now)

@@ -106,7 +106,9 @@ func main() {
 	vault := newContactVault(contactsPassword)
 	guard := newAccessGuard(username, password)
 	if db.postgres {
-		vault.store = db
+		if err := vault.useSharedStore(db, contactsPassword); err != nil {
+			log.Fatal(err)
+		}
 		guard.store = db
 	}
 	a := &app{
@@ -118,7 +120,9 @@ func main() {
 		contactsVault: vault,
 		notifications: notifications,
 	}
-	a.initAnnouncementAccess(os.Getenv("NOTIFICATIONS_PASSWORD"), os.Getenv("SUPER_NOTIFICATIONS_PASSWORD"))
+	if err := a.initAnnouncementAccess(os.Getenv("NOTIFICATIONS_PASSWORD"), os.Getenv("SUPER_NOTIFICATIONS_PASSWORD")); err != nil {
+		log.Fatal(err)
+	}
 	r := chi.NewRouter()
 	r.Use(secureHeaders)
 	r.Use(middleware.RequestID, middleware.Logger, middleware.Recoverer)

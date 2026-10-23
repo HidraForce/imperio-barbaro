@@ -25,10 +25,14 @@ func TestAnnouncementCapabilitiesAreIsolatedEvenWithIdenticalPasswords(t *testin
 	for _, postgres := range []bool{false, true} {
 		t.Run(fmt.Sprint("postgres=", postgres), func(t *testing.T) {
 			a := &app{db: integrationDatabase(t, postgres)}
-			a.initAnnouncementAccess(vaultTestPassword, vaultTestPassword)
+			if err := a.initAnnouncementAccess(vaultTestPassword, vaultTestPassword); err != nil {
+				t.Fatal(err)
+			}
 			contacts := newContactVault(vaultTestPassword)
 			if postgres {
-				contacts.store = a.db
+				if err := contacts.useSharedStore(a.db, vaultTestPassword); err != nil {
+					t.Fatal(err)
+				}
 			}
 			vaults := []*contactVault{contacts, a.customVault, a.timerVault}
 			for i, source := range vaults {
