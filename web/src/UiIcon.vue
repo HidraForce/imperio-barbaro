@@ -10,6 +10,7 @@ const paths = {
   Leadership: 'M3 3h18v18H3z M3 8h18 M7 12h4 M7 16h4 M15 12h2 M15 16h2',
   Rules: 'M4 3h16v18H4z M8 7h8 M8 12h8 M8 17h5',
   Moderation: 'M12 3l10 18H2z M12 9v5 M12 17v1',
+  Announcements: 'M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9 M9 21h6',
   Shield: 'M12 2l9 4v7c0 4-4 7-9 9-5-2-9-5-9-9V6z M12 6v11 M7 11h10',
 }
 </script>
