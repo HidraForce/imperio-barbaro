@@ -38,7 +38,7 @@ export function createGateway({apiBase,dist=resolve('dist'),fetcher=fetch}){
    }catch{fail(res,502,'Não foi possível carregar a liderança pública.')}
    return
   }
-  const pushRoutes=new Set(['GET /api/push/config','GET /api/push/announcements','POST /api/push/subscription','DELETE /api/push/subscription'])
+  const pushRoutes=new Set(['GET /api/push/config','GET /api/push/announcements','POST /api/push/subscription','DELETE /api/push/subscription','POST /api/push/test'])
   if(pushRoutes.has(req.method+' '+path)){
    if(!allowedOrigin(req)){fail(res,403,'Origem não autorizada.');return}
    if(!['GET','HEAD'].includes(req.method)&&req.headers['x-clanboard-request']!=='1'){fail(res,403,'Proteção de gravação ausente.');return}
@@ -50,7 +50,7 @@ export function createGateway({apiBase,dist=resolve('dist'),fetcher=fetch}){
    }catch{if(!res.headersSent)fail(res,502,'Não foi possível acessar os avisos.');else res.destroy()}
    return
   }
-  const pwaFiles=new Map([['/instalar','install.html'],['/app','member.html'],...['member.js','member.css','member.webmanifest','pwa-sw.js','pwa-state.js','pwa-state-worker.js','app-icon-180.png','app-icon-192.png','app-icon-512.png'].map(name=>['/'+name,name])])
+  const pwaFiles=new Map([['/instalar','install.html'],['/app','member.html'],...['member.js','member.css','member.webmanifest','pwa-sw.js','pwa-state.js','pwa-state-worker.js','app-icon-180.png','app-icon-192.png','app-icon-512.png','notification-badge.png'].map(name=>['/'+name,name])])
   const host=String(req.headers.host||'').toLowerCase().replace(/:\d+$/,'')
   if(['imperiobarbaro.com.br','www.imperiobarbaro.com.br'].includes(host)||pwaFiles.has(path)){
    if(!['GET','HEAD'].includes(req.method)){fail(res,405,'Método não permitido.');return}
@@ -70,7 +70,7 @@ export function createGateway({apiBase,dist=resolve('dist'),fetcher=fetch}){
   const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),90000)
   req.once('aborted',()=>controller.abort());res.once('close',()=>{if(!res.writableEnded)controller.abort()})
   const headers=new Headers()
-  for(const name of ['authorization','content-type','x-clanboard-request','x-contacts-session']){if(req.headers[name])headers.set(name,req.headers[name])}
+  for(const name of ['authorization','content-type','x-clanboard-request','x-contacts-session','x-notifications-session','x-super-notifications-session']){if(req.headers[name])headers.set(name,req.headers[name])}
   try{
    // Origin é conferida no serviço público. A chamada seguinte é interna e
    // usa o Host do binding; cabeçalhos encaminhados do visitante não são confiados.

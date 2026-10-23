@@ -10,7 +10,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -74,6 +73,7 @@ func initNotifications(db *database) (*notificationService, error) {
 		`CREATE TABLE IF NOT EXISTS announcements (id TEXT PRIMARY KEY, clan_id TEXT NOT NULL, kind TEXT NOT NULL, title TEXT NOT NULL, body TEXT NOT NULL, created_at BIGINT NOT NULL, recipients INTEGER NOT NULL)`,
 		`CREATE TABLE IF NOT EXISTS announcement_cooldowns (clan_id TEXT NOT NULL, kind TEXT NOT NULL, next_at BIGINT NOT NULL, PRIMARY KEY(clan_id,kind))`,
 		`CREATE TABLE IF NOT EXISTS push_jobs (id TEXT PRIMARY KEY, announcement_id TEXT NOT NULL, subscription_id TEXT NOT NULL, state TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, next_at BIGINT NOT NULL, lease_until BIGINT NOT NULL DEFAULT 0)`,
+		`CREATE TABLE IF NOT EXISTS push_test_limits (subscription_id TEXT PRIMARY KEY, next_at BIGINT NOT NULL)`,
 		`CREATE INDEX IF NOT EXISTS push_jobs_due ON push_jobs(state,next_at,lease_until)`,
 		`CREATE INDEX IF NOT EXISTS push_jobs_announcement ON push_jobs(announcement_id,state)`,
 		`CREATE INDEX IF NOT EXISTS announcements_recent ON announcements(clan_id,created_at DESC,id DESC)`,
@@ -139,14 +139,17 @@ func (a *app) pushConfig(w http.ResponseWriter, _ *http.Request) {
 	jsonResponse(w, 200, map[string]any{"publicKey": a.notifications.publicKey, "clans": []map[string]string{{"id": "1", "name": "Império Bárbaro"}, {"id": "2", "name": "Império Bárbar2"}}})
 }
 
+// Browsers include expirationTime (usually null) in PushSubscription.toJSON().
+type browserPushSubscription struct {
+	Endpoint       string       `json:"endpoint"`
+	ExpirationTime *float64     `json:"expirationTime"`
+	Keys           webpush.Keys `json:"keys"`
+}
+
 func (a *app) subscribePush(w http.ResponseWriter, r *http.Request) {
 	var input struct {
-		ClanID       string `json:"clanId"`
-		Subscription struct {
-			Endpoint       string       `json:"endpoint"`
-			ExpirationTime *float64     `json:"expirationTime"`
-			Keys           webpush.Keys `json:"keys"`
-		} `json:"subscription"`
+		ClanID       string                  `json:"clanId"`
+		Subscription browserPushSubscription `json:"subscription"`
 	}
 	if !decodeAdminJSON(w, r, &input) {
 		return
@@ -259,7 +262,7 @@ func (a *app) announcementStatus(w http.ResponseWriter, r *http.Request) {
 		securityError(w, 500, "Não foi possível conferir as inscrições.")
 		return
 	}
-	jsonResponse(w, 200, map[string]any{"templates": announcementTemplates, "cooldowns": cooldowns, "items": items, "subscribers": subscribers, "serverTime": time.Now().Unix()})
+	jsonResponse(w, 200, map[string]any{"templates": announcementTemplates, "cooldowns": cooldowns, "items": items, "subscribers": subscribers, "serverTime": time.Now().Unix(), "customConfigured": a.customVault != nil && a.customVault.configured, "timerConfigured": a.timerVault != nil && a.timerVault.configured})
 }
 
 func (a *app) warReminderReady(ctx context.Context, clanID string, second bool, now time.Time) error {
@@ -311,7 +314,7 @@ func (a *app) sendAnnouncement(w http.ResponseWriter, r *http.Request) {
 	}
 	if input.Kind == "custom" {
 		if !strings.HasSuffix(r.URL.Path, "/custom") {
-			securityError(w, 403, "Desbloqueie o aviso personalizado com a senha de Contatos.")
+			securityError(w, 403, "Desbloqueie o aviso personalizado com sua senha exclusiva.")
 			return
 		}
 		input.Title = strings.TrimSpace(input.Title)
@@ -395,7 +398,7 @@ func (a *app) sendAnnouncement(w http.ResponseWriter, r *http.Request) {
 
 func (a *app) publicPush(next http.Handler) http.Handler {
 	routes := map[string]http.HandlerFunc{
-		"GET /api/push/config": a.pushConfig, "POST /api/push/subscription": a.subscribePush, "DELETE /api/push/subscription": a.unsubscribePush, "GET /api/push/announcements": a.publicAnnouncements,
+		"POST /api/push/test": a.testPush, "GET /api/push/config": a.pushConfig, "POST /api/push/subscription": a.subscribePush, "DELETE /api/push/subscription": a.unsubscribePush, "GET /api/push/announcements": a.publicAnnouncements,
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if handler, ok := routes[r.Method+" "+r.URL.Path]; ok {
@@ -463,16 +466,7 @@ func (a *app) deliverPush(ctx context.Context, id string) {
 		_, _ = a.db.ExecContext(ctx, `UPDATE push_jobs SET state='failed' WHERE id=?`, id)
 		return
 	}
-	payload, _ := json.Marshal(map[string]any{"id": item.ID, "title": item.Title, "body": item.Body, "url": "/app?clan=" + item.ClanID + "#" + item.ID})
-	sendCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	defer cancel()
-	response, sendErr := webpush.SendNotificationWithContext(sendCtx, payload, &s, &webpush.Options{HTTPClient: a.notifications.client, Subscriber: "https://imperiobarbaro.com.br", VAPIDPublicKey: a.notifications.publicKey, VAPIDPrivateKey: a.notifications.privateKey, TTL: max(1, int(item.CreatedAt+3600-now)), Urgency: webpush.UrgencyHigh})
-	status := 0
-	if response != nil {
-		status = response.StatusCode
-		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 4096))
-		response.Body.Close()
-	}
+	status, sendErr := a.sendPushPayload(ctx, s, map[string]any{"id": item.ID, "title": item.Title, "body": item.Body, "url": "/app?clan=" + item.ClanID + "#" + item.ID}, max(1, int(item.CreatedAt+3600-now)))
 	state := "pending"
 	if sendErr == nil && status >= 200 && status < 300 {
 		state = "accepted"

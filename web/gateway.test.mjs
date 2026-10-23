@@ -14,10 +14,13 @@ test('Member PWA and push endpoints stay public without exposing dashboard crede
  try{
   assert.equal((await invoke(handler,'/instalar',{host:'imperiobarbaro.com.br'})).code,200)
   const manifest=await invoke(handler,'/member.webmanifest',{host:'imperiobarbaro.com.br'});assert.equal(manifest.code,200);assert.equal(manifest.headers['content-type'],'application/manifest+json; charset=utf-8')
-  const headers={host:'imperiobarbaro.com.br',authorization:'Basic private','x-contacts-session':'secret','content-type':'application/json','x-clanboard-request':'1'}
+  const headers={host:'imperiobarbaro.com.br',authorization:'Basic private','x-contacts-session':'secret','x-notifications-session':'custom-secret','x-super-notifications-session':'timer-secret','content-type':'application/json','x-clanboard-request':'1'}
   assert.equal((await invoke(handler,'/api/push/subscription',headers,'POST','{}')).code,200)
   assert.equal(calls.at(-1).options.headers.get('authorization'),null)
   assert.equal(calls.at(-1).options.headers.get('x-contacts-session'),null)
+  assert.equal((await invoke(handler,'/api/push/test',headers,'POST','{}')).code,200)
+  assert.equal(calls.at(-1).options.headers.get('x-notifications-session'),null)
+  assert.equal(calls.at(-1).options.headers.get('x-super-notifications-session'),null)
   assert.equal((await invoke(handler,'/api/push/subscription',{...headers,origin:'https://evil.test'},'POST','{}')).code,403)
   assert.equal((await invoke(handler,'/api/announcements',{host:'imperiobarbaro.com.br'},'POST','{}')).code,405)
  }finally{await rm(dir,{recursive:true})}
@@ -129,4 +132,13 @@ test('Leitura pública de liderança não encaminha credenciais e nunca permite 
  assert.equal(calls.length,2)
  const broken=createGateway({apiBase:'https://api.internal',fetcher:async()=>new Response('private error',{status:500})})
  const failed=await invoke(broken,'/public/leadership',headers);assert.equal(failed.code,502);assert.ok(!failed.data.includes('private error'))
+})
+
+ test('Private warning requests forward both scoped session headers',async()=>{
+ let headers
+ const handler=createGateway({apiBase:'https://api.internal',fetcher:async(url,options)=>{headers=options.headers;return new Response('{}')}})
+ const response=await invoke(handler,'/api/announcements/custom',{'x-clanboard-request':'1','x-notifications-session':'custom','x-super-notifications-session':'timer'},'POST','{}')
+ assert.equal(response.code,200)
+ assert.equal(headers.get('x-notifications-session'),'custom')
+ assert.equal(headers.get('x-super-notifications-session'),'timer')
 })

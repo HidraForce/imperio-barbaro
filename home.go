@@ -11,7 +11,7 @@ func publicHome(assets fs.FS, dashboard http.Handler, render ...http.HandlerFunc
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// The member app has an explicit public allowlist, including on localhost
 		// for previews. No dashboard assets or management APIs are exposed here.
-		pwa := map[string]string{"/instalar": "install.html", "/app": "member.html", "/member.js": "member.js", "/member.css": "member.css", "/member.webmanifest": "member.webmanifest", "/pwa-sw.js": "pwa-sw.js", "/pwa-state.js": "pwa-state.js", "/pwa-state-worker.js": "pwa-state-worker.js", "/app-icon-192.png": "app-icon-192.png", "/app-icon-512.png": "app-icon-512.png", "/app-icon-180.png": "app-icon-180.png"}[r.URL.Path]
+		pwa := map[string]string{"/instalar": "install.html", "/app": "member.html", "/member.js": "member.js", "/member.css": "member.css", "/member.webmanifest": "member.webmanifest", "/pwa-sw.js": "pwa-sw.js", "/pwa-state.js": "pwa-state.js", "/pwa-state-worker.js": "pwa-state-worker.js", "/app-icon-192.png": "app-icon-192.png", "/app-icon-512.png": "app-icon-512.png", "/app-icon-180.png": "app-icon-180.png", "/notification-badge.png": "notification-badge.png"}[r.URL.Path]
 		if pwa != "" {
 			if r.Method != http.MethodGet && r.Method != http.MethodHead {
 				w.Header().Set("Allow", "GET, HEAD")

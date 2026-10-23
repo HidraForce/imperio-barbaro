@@ -17,6 +17,9 @@ func maintainAnnouncements(ctx context.Context, db *database, now int64) error {
 }
 
 func maintainAnnouncementsTx(ctx context.Context, tx *databaseTx, now int64) error {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM push_test_limits WHERE next_at<=? OR NOT EXISTS (SELECT 1 FROM push_subscriptions s WHERE s.id=push_test_limits.subscription_id)`, now); err != nil {
+		return err
+	}
 	// An in-flight delivery keeps its lease until it finishes or the lease
 	// expires. Expired messages are never retried after their one-hour lifetime.
 	if _, err := tx.ExecContext(ctx, `UPDATE push_jobs SET state='failed',lease_until=0 WHERE state='pending' AND lease_until<=? AND announcement_id IN (SELECT id FROM announcements WHERE created_at<=?)`, now, now-3600); err != nil {

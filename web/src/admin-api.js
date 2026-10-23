@@ -1,7 +1,7 @@
 export async function adminAPI(path, options = {}) {
   const response = await fetch(path, {
     credentials: 'same-origin', cache: 'no-store', ...options,
-    headers: { 'Content-Type': 'application/json', 'X-Clanboard-Request': '1' },
+    headers: { 'Content-Type': 'application/json', 'X-Clanboard-Request': '1', ...options.headers },
   })
   const result = await response.json().catch(() => null)
   if (!response.ok) {

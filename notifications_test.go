@@ -30,10 +30,8 @@ func notificationTestApp(t *testing.T) (*app, http.Handler) {
 	r := chi.NewRouter()
 	r.Get("/api/announcements", a.announcementStatus)
 	r.Post("/api/announcements", a.sendAnnouncement)
-	r.Group(func(r chi.Router) {
-		r.Use(a.contactsVault.protect)
-		r.Post("/api/announcements/custom", a.sendAnnouncement)
-	})
+	a.initAnnouncementAccess("custom-test-private-password", "timer-test-private-password")
+	a.announcementAccessRoutes(r)
 	guard := newAccessGuard("leader", "private-admin-test-password")
 	return a, secureHeaders(a.publicPush(publicHome(a.staticFS, guard.middleware(sameOriginAPI(r)))))
 }
@@ -196,7 +194,7 @@ func TestCustomPasswordAndPublicFeed(t *testing.T) {
 	a, h := notificationTestApp(t)
 	enrollPush(t, h, "1")
 	unlock := httptest.NewRecorder()
-	a.contactsVault.unlock(unlock, httptest.NewRequest("POST", "/api/contacts/unlock", strings.NewReader(`{"password":"contacts-test-private-password"}`)))
+	a.customVault.unlock(unlock, httptest.NewRequest("POST", "/api/announcements/custom/unlock", strings.NewReader(`{"password":"custom-test-private-password"}`)))
 	var session struct {
 		Token string `json:"token"`
 	}
@@ -205,7 +203,7 @@ func TestCustomPasswordAndPublicFeed(t *testing.T) {
 	req.SetBasicAuth("leader", "private-admin-test-password")
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Clanboard-Request", "1")
-	req.Header.Set("X-Contacts-Session", session.Token)
+	req.Header.Set("X-Notifications-Session", session.Token)
 	res := httptest.NewRecorder()
 	h.ServeHTTP(res, req)
 	if res.Code != 202 {

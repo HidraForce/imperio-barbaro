@@ -46,6 +46,8 @@ Para uma VM nova, clone o repositório e crie `.env.oracle` a partir de `deploy/
 | `CLAN_TAG1`, `CLAN_TAG2` | Tags dos clãs |
 | `APP_USERNAME`, `APP_PASSWORD` | Login do painel |
 | `CONTACTS_PASSWORD` | Senha separada dos contatos |
+| `NOTIFICATIONS_PASSWORD` | Senha dos avisos personalizados, mínimo 16 caracteres, diferente de APP_PASSWORD |
+| `SUPER_NOTIFICATIONS_PASSWORD` | Senha para liberar antecipadamente o intervalo de uma hora, mínimo 16 caracteres, diferente de APP_PASSWORD |
 
 Os registros DNS A dos dois domínios devem apontar para o IP público reservado da VM. Libere TCP 80 e 443 para a internet e restrinja SSH ao seu IP. Não exponha a porta 2025. O Compose de produção configura o SQLite e seu volume; não combine esse arquivo com o Compose de desenvolvimento.
 
@@ -54,6 +56,8 @@ bash scripts/oracle-compose.sh config -q
 bash scripts/oracle-compose.sh up -d --build
 bash scripts/oracle-compose.sh ps
 ```
+
+As duas senhas de avisos são opcionais: sem elas, cada acesso correspondente permanece bloqueado. Adicione-as ao `.env.oracle` privado na VM; o Compose as encaminha ao aplicativo. Para alterar apenas as variáveis após um deploy, recrie o serviço com `docker compose --env-file .env.oracle -f compose.oracle.yml up -d --no-deps clanboard`. Reiniciar o contêiner existente não atualiza o ambiente.
 
 O site deve abrir sem login; o painel deve pedir as credenciais existentes. Confira os clãs, o desbloqueio dos contatos e os dados após reiniciar o serviço.
 

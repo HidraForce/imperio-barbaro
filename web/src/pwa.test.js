@@ -42,6 +42,10 @@ test('Worker displays closed-app pushes and only opens the member app on the sam
  let pending
  listeners.push({data:{json:()=>({id:'stable-id',title:'Raids',body:'Use seus ataques!',url:'https://evil.test/'})},waitUntil:p=>pending=p});await pending
  assert.equal(shown[0].title,'Raids');assert.equal(shown[0].options.body,'Use seus ataques!');assert.equal(shown[0].options.tag,'stable-id');assert.equal(shown[0].options.silent,false)
+ assert.equal(shown[0].options.badge,'/notification-badge.png')
+ listeners.push({data:{json:()=>({id:'test-id',title:'Teste',body:'Teste neste celular',url:'/app'})},waitUntil:p=>pending=p});await pending
+ for(const key of ['icon','badge','renotify','requireInteraction','silent'])assert.equal(shown[0].options[key],shown[1].options[key])
+ assert.deepEqual([...shown[0].options.vibrate],[...shown[1].options.vibrate])
  listeners.notificationclick({notification:{close(){},data:{url:'https://evil.test/'}},waitUntil:p=>pending=p});await pending
  assert.equal(opened[0],'https://imperiobarbaro.com.br/app')
  listeners.notificationclick({notification:{close(){},data:{url:'/app?clan=2#abc'}},waitUntil:p=>pending=p});await pending
@@ -49,4 +53,53 @@ test('Worker displays closed-app pushes and only opens the member app on the sam
  let intercepted=false
  listeners.fetch({request:{url:'https://imperiobarbaro.com.br/api/contacts',method:'GET'},respondWith(){intercepted=true}})
  assert.equal(intercepted,false,'private APIs must not be cached')
+})
+
+async function memberHarness({permission='granted',existing=true}={}){
+ const elements=new Map(),listeners={},swListeners={}
+ function element(id){if(!elements.has(id))elements.set(id,{value:'',hidden:false,disabled:false,textContent:'',classList:{add(){},toggle(){},contains(){return false}},addEventListener:(name,fn)=>listeners[id+':'+name]=fn,replaceChildren(){}});return elements.get(id)}
+ let activate,registered
+ const ready=new Promise(resolve=>activate=resolve),registeredPromise=new Promise(resolve=>registered=resolve)
+ const requests=[],subscription={toJSON:()=>({endpoint:'device-only'})}
+ const activeRegistration={pushManager:{getSubscription:async()=>existing?subscription:null,subscribe:async()=>{existing=true;return subscription}}}
+ const context=vm.createContext({memberSetup,memberClan,memberAppURL,URL,URLSearchParams,Uint8Array,atob,
+  isSecureContext:true,PushManager:function(){},Notification:{permission,requestPermission:async()=>{context.Notification.permission='granted';return 'granted'}},
+  navigator:{userAgent:'Android',platform:'Linux',serviceWorker:{register:async()=>{registered();return {pushManager:{getSubscription(){throw Error('Inactive registration used')}}}},ready,addEventListener:(name,fn)=>swListeners[name]=fn}},
+  document:{hidden:false,body:{dataset:{page:'install'},classList:{toggle(){}}},getElementById:element,createElement:()=>element(Symbol()),addEventListener:(name,fn)=>listeners['document:'+name]=fn},
+  matchMedia:()=>({matches:true}),localStorage:{getItem:()=> '1',setItem(){}},location:{search:'',pathname:'/instalar',hash:''},history:{replaceState(){}},
+  setInterval(){return 1},fetch:async(path,options)=>{requests.push({path,options});return {ok:true,json:async()=>path==='/api/push/config'?{publicKey:'AA'}:{accepted:true}}},addEventListener:(name,fn)=>listeners['window:'+name]=fn,
+ })
+ context.window=context
+ const source=await readFile(new URL('../public/member.js',import.meta.url),'utf8')
+ vm.runInContext(source.replace(/^import .*\n/,''),context)
+ await registeredPromise
+ return {elements,listeners,requests,context,activate:async()=>{activate(activeRegistration);await vm.runInContext('bootPromise',context)}}
+}
+
+test('Installed app waits for the active worker and recognizes existing permission without another tap or reload',async()=>{
+ const app=await memberHarness()
+ assert.equal(app.elements.get('enable-notifications').hidden,true)
+ assert.match(app.elements.get('setup-status').textContent,/Verificando/)
+ await app.activate()
+ assert.equal(app.elements.get('enable-notifications').hidden,true)
+ assert.equal(app.elements.get('setup-status').textContent,'Todos os avisos estão ativados.')
+ assert.equal(app.requests.filter(x=>x.path==='/api/push/subscription').length,1)
+ await app.listeners['test-notification:click']()
+ const sent=app.requests.at(-1)
+ assert.equal(sent.path,'/api/push/test')
+ assert.deepEqual(JSON.parse(sent.options.body),{subscription:{endpoint:'device-only'}})
+ // Returning from system settings updates the UI without a manual refresh.
+ app.context.Notification.permission='denied'
+ await app.listeners['window:focus']()
+ assert.equal(app.elements.get('setup-status').textContent,'Seus avisos estão bloqueados.')
+})
+
+test('First activation immediately completes the installed app setup',async()=>{
+ const app=await memberHarness({permission:'default',existing:false})
+ await app.activate()
+ assert.equal(app.elements.get('enable-notifications').hidden,false)
+ await app.listeners['enable-notifications:click']()
+ assert.equal(app.elements.get('enable-notifications').hidden,true)
+ assert.equal(app.elements.get('setup-status').textContent,'Todos os avisos estão ativados.')
+ assert.equal(app.elements.get('test-notification').hidden,false)
 })

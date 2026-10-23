@@ -33,6 +33,8 @@ type app struct {
 	clanTags      map[string]string
 	staticFS      fs.FS
 	contactsVault *contactVault
+	customVault   *contactVault
+	timerVault    *contactVault
 	cacheMu       sync.Mutex
 	cache         map[string]clashCacheEntry
 	pending       map[string]*clashFlight
@@ -52,6 +54,11 @@ func main() {
 	contactsPassword := os.Getenv("CONTACTS_PASSWORD")
 	if contactsPassword != "" && (!validCredentials("contatos", contactsPassword) || contactsPassword == password) {
 		log.Fatal("CONTACTS_PASSWORD deve ter pelo menos 16 caracteres e ser diferente de APP_PASSWORD.")
+	}
+	for _, name := range []string{"NOTIFICATIONS_PASSWORD", "SUPER_NOTIFICATIONS_PASSWORD"} {
+		if value := os.Getenv(name); value != "" && (!validCredentials("avisos", value) || value == password) {
+			log.Fatalf("%s deve ter pelo menos 16 caracteres e ser diferente de APP_PASSWORD.", name)
+		}
 	}
 	db, err := openDatabase()
 	if err != nil {
@@ -111,6 +118,7 @@ func main() {
 		contactsVault: vault,
 		notifications: notifications,
 	}
+	a.initAnnouncementAccess(os.Getenv("NOTIFICATIONS_PASSWORD"), os.Getenv("SUPER_NOTIFICATIONS_PASSWORD"))
 	r := chi.NewRouter()
 	r.Use(secureHeaders)
 	r.Use(middleware.RequestID, middleware.Logger, middleware.Recoverer)
@@ -131,6 +139,7 @@ func main() {
 	r.Post("/api/moderation/sync", a.syncModeration)
 	r.Get("/api/announcements", a.announcementStatus)
 	r.Post("/api/announcements", a.sendAnnouncement)
+	a.announcementAccessRoutes(r)
 	r.Get("/api/clan", a.clan)
 	r.Get("/api/war", a.war)
 	r.Get("/api/raids", a.raids)
@@ -141,7 +150,6 @@ func main() {
 	r.Delete("/api/contacts/session", a.contactsVault.lock)
 	r.Group(func(r chi.Router) {
 		r.Use(a.contactsVault.protect)
-		r.Post("/api/announcements/custom", a.sendAnnouncement)
 		r.Get("/api/contacts", a.contacts)
 		r.Post("/api/contacts", a.saveContact)
 		r.Post("/api/contacts/merge", a.mergeContact)
