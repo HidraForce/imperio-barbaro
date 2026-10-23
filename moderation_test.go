@@ -13,7 +13,7 @@ import (
 func TestAutomaticWarWarningsOnlyZeroAttacksInConfirmedLineup(t *testing.T) {
 	now := time.Now().UTC()
 	since := now.Add(-7 * 24 * time.Hour)
-	war := moderationWar{State: "warEnded", EndTime: now.Add(-time.Hour).Format("20060102T150405.000Z"), AttacksPerMember: 2, Clan: moderationSide{Tag: "#P0Y8LQ", Members: []moderationMember{{Tag: "#P0Y8LQ", Name: "Zero"}, {Tag: "#QY8L0P", Name: "Parcial", Attacks: []json.RawMessage{json.RawMessage(`{}`)}}}}, Opponent: moderationSide{Tag: "#QQQQ"}}
+	war := moderationWar{State: "warEnded", TeamSize: 2, StartTime: now.Add(-25 * time.Hour).Format("20060102T150405.000Z"), EndTime: now.Add(-time.Hour).Format("20060102T150405.000Z"), AttacksPerMember: 2, Clan: moderationSide{Tag: "#P0Y8LQ", Attacks: intPointer(1), Members: []moderationMember{{Tag: "#P0Y8LQ", Name: "Zero"}, {Tag: "#QY8L0P", Name: "Parcial", Attacks: []json.RawMessage{json.RawMessage(`{}`)}}}}, Opponent: moderationSide{Tag: "#QQQQ"}}
 	body, _ := json.Marshal(war)
 	records := warWarnings(body, "P0Y8LQ", "war", war.EndTime, since, now)
 	if len(records) != 1 || records[0].PlayerName != "Zero" || records[0].Status != "active" {
@@ -44,12 +44,12 @@ func TestRaidZeroNeedsRecordedRosterAndReview(t *testing.T) {
 	now := time.Now().UTC()
 	start := now.Add(-3 * 24 * time.Hour).Format("20060102T150405.000Z")
 	end := now.Add(-time.Hour).Format("20060102T150405.000Z")
-	body, _ := json.Marshal(map[string]any{"items": []any{map[string]any{"startTime": start, "endTime": end, "members": []any{map[string]any{"tag": "#QY8L0P", "name": "Parcial", "attacks": 1, "attackLimit": 5, "bonusAttackLimit": 0}}}}})
-	if len(raidWarnings(body, nil, now.Add(-7*24*time.Hour), now)) != 0 {
-		t.Fatal("invented warning without historical roster")
+	body, _ := json.Marshal(map[string]any{"items": []any{map[string]any{"state": "ended", "totalAttacks": 1, "startTime": start, "endTime": end, "members": []any{map[string]any{"tag": "#QY8L0P", "name": "Parcial", "attacks": 1, "attackLimit": 5, "bonusAttackLimit": 0}}}}})
+	if got := raidWarnings(body, nil, now.Add(-7*24*time.Hour), now); len(got) != 1 || got[0].PlayerName != "Parcial" {
+		t.Fatal("confirmed partial attacker should not require an absent-member roster", got)
 	}
 	records := raidWarnings(body, map[string][]raidRosterMember{start: {{Tag: "#P0Y8LQ", Name: "Zero"}, {Tag: "#QY8L0P", Name: "Parcial"}}}, now.Add(-7*24*time.Hour), now)
-	if len(records) != 1 || records[0].PlayerName != "Zero" || records[0].Status != "pending" {
+	if len(records) != 2 || records[0].PlayerName != "Zero" || records[0].Status != "pending" || records[1].PlayerName != "Parcial" || records[1].Status != "pending" {
 		t.Fatalf("raid warning incorrectly counted: %+v", records)
 	}
 }
@@ -61,7 +61,7 @@ func TestModerationDeduplicatesAndKeepsDismissalsAcrossSyncs(t *testing.T) {
 	a.clash = &http.Client{Transport: clashTransport(func(r *http.Request) (*http.Response, error) {
 		body, status := `{"items":[]}`, 200
 		if strings.HasSuffix(r.URL.Path, "/currentwar") {
-			body = `{"state":"warEnded","endTime":"` + end + `","attacksPerMember":2,"clan":{"tag":"#P0Y8LQ","members":[{"tag":"#P0Y8LQ","name":"Zero"}]}}`
+			body = `{"state":"warEnded","teamSize":1,"startTime":"` + now.Add(-25*time.Hour).Format("20060102T150405.000Z") + `","endTime":"` + end + `","attacksPerMember":2,"clan":{"tag":"#P0Y8LQ","attacks":0,"members":[{"tag":"#P0Y8LQ","name":"Zero"}]}}`
 		}
 		if strings.HasSuffix(r.URL.Path, "/leaguegroup") {
 			status = 404

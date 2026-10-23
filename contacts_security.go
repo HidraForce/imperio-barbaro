@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/pbkdf2"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -17,17 +18,42 @@ import (
 const contactSessionTTL = 10 * time.Minute
 
 type contactVault struct {
-	store      *database
-	mu         sync.Mutex
-	configured bool
-	password   [32]byte
-	sessions   map[[32]byte]time.Time
-	failures   map[string]failedAccess
-	now        func() time.Time
+	store                  *database
+	scope, header, envName string
+	mu                     sync.Mutex
+	configured             bool
+	password               [32]byte
+	salt                   [16]byte
+	sessions               map[[32]byte]time.Time
+	failures               map[string]failedAccess
+	now                    func() time.Time
 }
 
 func newContactVault(password string) *contactVault {
-	return &contactVault{configured: validCredentials("contatos", password), password: sha256.Sum256([]byte(password)), sessions: make(map[[32]byte]time.Time), failures: make(map[string]failedAccess), now: time.Now}
+	return newScopedVault(password, "contacts", "X-Contacts-Session", "CONTACTS_PASSWORD")
+}
+
+// Each capability has its own header, session namespace and attempt budget.
+func newScopedVault(password, scope, header, envName string) *contactVault {
+	v := &contactVault{scope: scope, header: header, envName: envName, configured: validCredentials("protegido", password), sessions: make(map[[32]byte]time.Time), failures: make(map[string]failedAccess), now: time.Now}
+	if _, err := rand.Read(v.salt[:]); err != nil {
+		panic(err)
+	}
+	if v.configured {
+		v.password = v.derivePassword(password)
+	}
+	return v
+}
+
+// PBKDF2 protects password-derived keys; SHA-256 below only hashes random tokens.
+func (v *contactVault) derivePassword(value string) [32]byte {
+	key, err := pbkdf2.Key(sha256.New, value, v.salt[:], 600000, 32)
+	if err != nil {
+		panic(err)
+	} // Fixed, valid KDF parameters.
+	var result [32]byte
+	copy(result[:], key)
+	return result
 }
 
 func (v *contactVault) prune(now time.Time) {
@@ -45,7 +71,7 @@ func (v *contactVault) prune(now time.Time) {
 
 func (v *contactVault) unlock(w http.ResponseWriter, r *http.Request) {
 	if !v.configured {
-		securityError(w, 503, "Os contatos estão bloqueados. Configure CONTACTS_PASSWORD no servidor.")
+		securityError(w, 503, "Acesso bloqueado. Configure "+v.envName+" no servidor.")
 		return
 	}
 	var input struct {
@@ -79,7 +105,7 @@ func (v *contactVault) unlock(w http.ResponseWriter, r *http.Request) {
 		securityError(w, 429, "Muitas tentativas de desbloqueio. Aguarde cinco minutos.")
 		return
 	}
-	guess := sha256.Sum256([]byte(input.Password))
+	guess := v.derivePassword(input.Password)
 	if subtle.ConstantTimeCompare(guess[:], v.password[:]) != 1 {
 		if entry.count == 0 {
 			if len(v.failures) >= 2048 {
@@ -91,17 +117,17 @@ func (v *contactVault) unlock(w http.ResponseWriter, r *http.Request) {
 		}
 		entry.count++
 		v.failures[ip] = entry
-		securityError(w, 403, "Senha de contatos incorreta.")
+		securityError(w, 403, "Senha incorreta para este acesso.")
 		return
 	}
 	if len(v.sessions) >= 256 {
 		w.Header().Set("Retry-After", "60")
-		securityError(w, 429, "Há muitas sessões de contatos abertas. Tente novamente em um minuto.")
+		securityError(w, 429, "Há muitas sessões abertas. Tente novamente em um minuto.")
 		return
 	}
 	var random [32]byte
 	if _, err := rand.Read(random[:]); err != nil {
-		securityError(w, 500, "Não foi possível desbloquear os contatos.")
+		securityError(w, 500, "Não foi possível desbloquear este acesso.")
 		return
 	}
 	token := base64.RawURLEncoding.EncodeToString(random[:])
@@ -116,14 +142,14 @@ func (v *contactVault) protect(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		if !v.configured {
-			securityError(w, 503, "Os contatos estão bloqueados. Configure CONTACTS_PASSWORD no servidor.")
+			securityError(w, 503, "Acesso bloqueado. Configure "+v.envName+" no servidor.")
 			return
 		}
 		if v.store != nil {
 			v.protectShared(w, r, next)
 			return
 		}
-		token := r.Header.Get("X-Contacts-Session")
+		token := r.Header.Get(v.header)
 		key := sha256.Sum256([]byte(token))
 		v.mu.Lock()
 		now := v.now()
@@ -131,7 +157,7 @@ func (v *contactVault) protect(next http.Handler) http.Handler {
 		expires, ok := v.sessions[key]
 		v.mu.Unlock()
 		if len(token) != 43 || !ok || !now.Before(expires) {
-			securityError(w, 423, "Contatos bloqueados. Informe a senha exclusiva para continuar.")
+			securityError(w, 423, "Acesso bloqueado. Informe a senha exclusiva para continuar.")
 			return
 		}
 		next.ServeHTTP(w, r)
@@ -144,7 +170,7 @@ func (v *contactVault) lock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	v.mu.Lock()
-	delete(v.sessions, sha256.Sum256([]byte(r.Header.Get("X-Contacts-Session"))))
+	delete(v.sessions, sha256.Sum256([]byte(r.Header.Get(v.header))))
 	v.mu.Unlock()
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusNoContent)

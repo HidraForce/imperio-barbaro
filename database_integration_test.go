@@ -115,8 +115,12 @@ func TestPostgresContactSessionsAndAttemptsAreShared(t *testing.T) {
 	db := integrationDatabase(t, true)
 	secret := "uma-senha-adicional-privada"
 	a, b := newContactVault(secret), newContactVault(secret)
-	a.store = db
-	b.store = db
+	if err := a.useSharedStore(db, secret); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.useSharedStore(db, secret); err != nil {
+		t.Fatal(err)
+	}
 	unlock := httptest.NewRecorder()
 	a.unlock(unlock, httptest.NewRequest("POST", "/api/contacts/unlock", strings.NewReader(`{"password":"`+secret+`"}`)))
 	if unlock.Code != 200 {

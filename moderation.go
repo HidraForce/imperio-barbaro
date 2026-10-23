@@ -16,26 +16,27 @@ import (
 )
 
 type moderationRecord struct {
-	ID         string `json:"id"`
-	Revision   int64  `json:"revision"`
-	PlayerTag  string `json:"playerTag"`
-	PlayerName string `json:"playerName"`
-	Kind       string `json:"kind"`
-	Sector     string `json:"sector"`
-	Sanction   string `json:"sanction"`
-	Status     string `json:"status"`
-	Reason     string `json:"reason"`
-	Action     string `json:"action"`
-	Notes      string `json:"notes"`
-	Source     string `json:"source"`
-	EventKey   string `json:"eventKey"`
-	EventStart string `json:"eventStart,omitempty"`
-	EventEnd   string `json:"eventEnd,omitempty"`
-	CreatedAt  string `json:"createdAt"`
-	UpdatedAt  string `json:"updatedAt"`
-	IssuedAt   string `json:"issuedAt,omitempty"`
-	AppliedAt  string `json:"appliedAt,omitempty"`
-	ExpiresAt  string `json:"expiresAt,omitempty"`
+	ID           string `json:"id"`
+	Revision     int64  `json:"revision"`
+	AutoRevision int64  `json:"autoRevision,omitempty"`
+	PlayerTag    string `json:"playerTag"`
+	PlayerName   string `json:"playerName"`
+	Kind         string `json:"kind"`
+	Sector       string `json:"sector"`
+	Sanction     string `json:"sanction"`
+	Status       string `json:"status"`
+	Reason       string `json:"reason"`
+	Action       string `json:"action"`
+	Notes        string `json:"notes"`
+	Source       string `json:"source"`
+	EventKey     string `json:"eventKey"`
+	EventStart   string `json:"eventStart,omitempty"`
+	EventEnd     string `json:"eventEnd,omitempty"`
+	CreatedAt    string `json:"createdAt"`
+	UpdatedAt    string `json:"updatedAt"`
+	IssuedAt     string `json:"issuedAt,omitempty"`
+	AppliedAt    string `json:"appliedAt,omitempty"`
+	ExpiresAt    string `json:"expiresAt,omitempty"`
 }
 type moderationSettings struct {
 	Revision  int64    `json:"revision"`
@@ -143,6 +144,9 @@ func insertModeration(ctx context.Context, db *database, tag string, record *mod
 	}
 	record.ID = hex.EncodeToString(id)
 	record.Revision = 1
+	if record.Source != "manual" {
+		record.AutoRevision = 1
+	}
 	record.CreatedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	record.UpdatedAt = record.CreatedAt
 	if record.Kind == "warning" && record.Status == "active" {
@@ -201,8 +205,13 @@ func (a *app) saveModeration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var payload string
-	if err := a.db.QueryRowContext(r.Context(), `SELECT payload FROM moderation_records WHERE id=? AND clan_tag=?`, id, tag).Scan(&payload); err != nil {
+	var savedRevision int64
+	if err := a.db.QueryRowContext(r.Context(), `SELECT revision,payload FROM moderation_records WHERE id=? AND clan_tag=?`, id, tag).Scan(&savedRevision, &payload); err != nil {
 		jsonResponse(w, 404, map[string]string{"error": "Registro não encontrado neste clã."})
+		return
+	}
+	if input.Revision != savedRevision {
+		jsonResponse(w, 409, map[string]string{"error": "O registro mudou em outra sessão ou na conferência automática. Recarregue o histórico antes de salvar."})
 		return
 	}
 	var saved moderationRecord
@@ -305,10 +314,12 @@ type moderationMember struct {
 }
 type moderationSide struct {
 	Tag     string             `json:"tag"`
+	Attacks *int               `json:"attacks"`
 	Members []moderationMember `json:"members"`
 }
 type moderationWar struct {
 	State            string         `json:"state"`
+	TeamSize         int            `json:"teamSize"`
 	StartTime        string         `json:"startTime"`
 	EndTime          string         `json:"endTime"`
 	AttacksPerMember int            `json:"attacksPerMember"`
@@ -322,25 +333,11 @@ func closedSince(end string, since, now time.Time) bool {
 }
 func warWarnings(body []byte, tag, source, event string, since, now time.Time) []moderationRecord {
 	var war moderationWar
-	if json.Unmarshal(body, &war) != nil || war.State != "warEnded" || !closedSince(war.EndTime, since, now) {
+	if json.Unmarshal(body, &war) != nil || war.State != "warEnded" || !finishedPeriod(war.StartTime, war.EndTime, since, now) {
 		return nil
 	}
-	side := war.Clan
-	if normalizeTag(side.Tag) != tag {
-		side = war.Opponent
-	}
-	if normalizeTag(side.Tag) != tag {
-		return nil
-	}
-	limit := war.AttacksPerMember
-	if limit == 0 {
-		if source == "cwl" {
-			limit = 1
-		} else {
-			limit = 2
-		}
-	}
-	if (source == "war" && limit != 2) || (source == "cwl" && limit != 1) {
+	side, limit, complete := finalWarSide(war, tag, source)
+	if !complete {
 		return nil
 	}
 	records := []moderationRecord{}
@@ -358,24 +355,14 @@ func warWarnings(body []byte, tag, source, event string, since, now time.Time) [
 }
 func raidWarnings(body []byte, rosters map[string][]raidRosterMember, since, now time.Time) []moderationRecord {
 	var response struct {
-		Items []struct {
-			StartTime string `json:"startTime"`
-			EndTime   string `json:"endTime"`
-			Members   []struct {
-				Tag         string `json:"tag"`
-				Name        string `json:"name"`
-				Attacks     int    `json:"attacks"`
-				AttackLimit *int   `json:"attackLimit"`
-				Bonus       int    `json:"bonusAttackLimit"`
-			} `json:"members"`
-		} `json:"items"`
+		Items []moderationRaidSeason `json:"items"`
 	}
 	if json.Unmarshal(body, &response) != nil {
 		return nil
 	}
 	records := []moderationRecord{}
 	for _, season := range response.Items {
-		if !closedSince(season.EndTime, since, now) {
+		if season.State != "ended" || !finishedPeriod(season.StartTime, season.EndTime, since, now) || !finalRaidMembers(season) {
 			continue
 		}
 		seen := map[string]bool{}
@@ -393,14 +380,14 @@ func raidWarnings(body []byte, rosters map[string][]raidRosterMember, since, now
 			}
 		}
 		for _, m := range season.Members {
-			if m.AttackLimit == nil || *m.AttackLimit < 1 || *m.AttackLimit > 6 || m.Bonus < 0 || m.Bonus > 1 || m.Attacks < 0 {
+			if m.AttackLimit == nil || *m.AttackLimit < 1 || *m.AttackLimit > 6 || m.Bonus < 0 || m.Bonus > 1 || m.Attacks == nil || *m.Attacks < 0 {
 				continue
 			}
 			limit := *m.AttackLimit + m.Bonus
-			if m.Attacks != 0 {
+			if limit > 6 || *m.Attacks >= limit {
 				continue
 			}
-			record := moderationRecord{PlayerTag: m.Tag, PlayerName: m.Name, Kind: "warning", Status: "pending", Source: "raids", EventKey: "raids:" + season.StartTime + ":" + normalizeTag(m.Tag), Reason: fmt.Sprintf("Raids de %s: %d/%d ataques usados. Conferir elegibilidade e participação em outro clã.", season.StartTime, m.Attacks, limit)}
+			record := moderationRecord{PlayerTag: m.Tag, PlayerName: m.Name, Kind: "warning", Status: "pending", Source: "raids", EventKey: "raids:" + season.StartTime + ":" + normalizeTag(m.Tag), Reason: fmt.Sprintf("Raids encerradas em %s: %d/%d ataques disponíveis usados. Conferir elegibilidade e participação em outro clã.", season.EndTime, *m.Attacks, limit)}
 			record.EventStart, record.EventEnd = season.StartTime, season.EndTime
 			if validModerationRecord(&record) {
 				records = append(records, record)
@@ -420,6 +407,7 @@ func (a *app) collectWarnings(ctx context.Context, tag string) (int, []string, e
 	}
 	now := time.Now().UTC()
 	records := []moderationRecord{}
+	counts := map[string]finalAttackCount{}
 	problems := []string{}
 	_, _, memberErr := a.trackClanMembers(ctx, tag)
 	members, historyErr := a.memberObservations(ctx, tag, now)
@@ -431,7 +419,14 @@ func (a *app) collectWarnings(ctx context.Context, tag string) (int, []string, e
 	if err == nil {
 		var w moderationWar
 		if json.Unmarshal(body, &w) == nil && w.State != "" {
-			records = append(records, warWarnings(body, tag, "war", w.EndTime, since, now)...)
+			checkedAt := minSnapshotTime(now, a.clashFetchedAt(base+"/currentwar"))
+			records = append(records, warWarnings(body, tag, "war", w.EndTime, since, checkedAt)...)
+			finalWarCounts(body, tag, "war", w.EndTime, since, checkedAt, counts)
+			if w.State == "warEnded" && finishedPeriod(w.StartTime, w.EndTime, since, now) {
+				if _, _, ok := finalWarSide(w, tag, "war"); !ok {
+					problems = append(problems, "Guerra encerrada: escalação ou contagem final incompleta; nenhum aviso gerado.")
+				}
+			}
 		} else {
 			problems = append(problems, "Resposta inválida da guerra.")
 		}
@@ -464,21 +459,26 @@ func (a *app) collectWarnings(ctx context.Context, tag string) (int, []string, e
 			problems = append(problems, "Não foi possível ler as listas históricas de raids.")
 		}
 		var raidData struct {
-			Items []struct {
-				StartTime string `json:"startTime"`
-				EndTime   string `json:"endTime"`
-			} `json:"items"`
+			Items []moderationRaidSeason `json:"items"`
 		}
 		if json.Unmarshal(body, &raidData) != nil || raidData.Items == nil {
 			problems = append(problems, "Resposta inválida das raids.")
 		} else {
 			for _, season := range raidData.Items {
-				if closedSince(season.EndTime, since, now) && rosters[season.StartTime] == nil {
-					problems = append(problems, "Raid "+season.StartTime+": sem lista capturada durante o evento; ausentes precisam ser conferidos manualmente.")
+				if season.State == "ended" && finishedPeriod(season.StartTime, season.EndTime, since, now) {
+					if !finalRaidMembers(season) {
+						problems = append(problems, "Raid "+season.StartTime+": contagem final incompleta; nenhum aviso gerado.")
+						continue
+					}
+					if rosters[season.StartTime] == nil {
+						problems = append(problems, "Raid "+season.StartTime+": sem lista capturada durante o evento; ausentes precisam ser conferidos manualmente.")
+					}
 				}
 			}
 		}
-		records = append(records, raidWarnings(body, rosters, since, now)...)
+		checkedAt := minSnapshotTime(now, a.clashFetchedAt(base+"/capitalraidseasons?limit=10"))
+		records = append(records, raidWarnings(body, rosters, since, checkedAt)...)
+		finalRaidCounts(body, since, checkedAt, counts)
 	} else {
 		problems = append(problems, "Raids: "+err.Error())
 	}
@@ -505,11 +505,20 @@ func (a *app) collectWarnings(ctx context.Context, tag string) (int, []string, e
 					problems = append(problems, "Não foi possível consultar uma rodada da CWL.")
 					continue
 				}
-				records = append(records, warWarnings(body, tag, "cwl", warTag, since, now)...)
+				checkedAt := minSnapshotTime(now, a.clashFetchedAt("/clanwarleagues/wars/"+url.PathEscape("#"+warTag)))
+				records = append(records, warWarnings(body, tag, "cwl", warTag, since, checkedAt)...)
+				finalWarCounts(body, tag, "cwl", warTag, since, checkedAt, counts)
 			}
 		}
 	}
 	records = membershipWarnings(records, members, memberErr == nil && historyErr == nil)
+	conflicts, err := reconcileAutomaticWarnings(ctx, a.db, tag, records, counts)
+	if err != nil {
+		return 0, problems, err
+	}
+	if conflicts > 0 {
+		problems = append(problems, fmt.Sprintf("%d ocorrência(s) já revisada(s) pela liderança divergem da contagem final. Confira o histórico; as decisões foram preservadas.", conflicts))
+	}
 	count := 0
 	for i := range records {
 		added, err := insertModeration(ctx, a.db, tag, &records[i])

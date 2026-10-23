@@ -1,6 +1,6 @@
 importScripts('/pwa-state-worker.js');
-const CACHE='imperio-members-v1';
-const SHELL=['/app','/member.js','/member.css','/pwa-state.js','/member.webmanifest','/app-icon-192.png','/app-icon-512.png','/app-icon-180.png'];
+const CACHE='imperio-members-v2';
+const SHELL=['/app','/member.js','/member.css','/pwa-state.js','/member.webmanifest','/app-icon-192.png','/app-icon-512.png','/app-icon-180.png','/notification-badge.png'];
 self.addEventListener('install',event=>{event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(SHELL)).then(()=>self.skipWaiting()))});
 self.addEventListener('activate',event=>{event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key.startsWith('imperio-members-')&&key!==CACHE).map(key=>caches.delete(key)))).then(()=>self.clients.claim()))});
 self.addEventListener('fetch',event=>{
@@ -12,7 +12,7 @@ self.addEventListener('fetch',event=>{
 });
 self.addEventListener('push',event=>{
  let data={};try{data=event.data?.json()||{}}catch{}
- const options={body:data.body||'Abra o app para conferir o aviso do seu clã.',icon:'/app-icon-192.png',badge:'/app-icon-192.png',tag:data.id||'imperio-aviso',renotify:true,requireInteraction:true,silent:false,vibrate:[220,100,220],data:{url:safePushURL(data.url)}};
+ const options={body:data.body||'Abra o app para conferir o aviso do seu clã.',icon:'/app-icon-192.png',badge:'/notification-badge.png',tag:data.id||'imperio-aviso',renotify:true,requireInteraction:true,silent:false,vibrate:[220,100,220],data:{url:safePushURL(data.url)}};
  event.waitUntil(self.registration.showNotification(data.title||'📣 Império Bárbaro',options));
 });
 self.addEventListener('notificationclick',event=>{

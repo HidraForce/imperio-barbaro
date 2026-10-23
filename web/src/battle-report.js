@@ -1,3 +1,4 @@
+import { clashTime, confirmedEnd, completeWarAttacks, completeRaidAttacks } from './final-activity.js'
 import { csvCell } from './report-csv.js'
 import { entryEligibility } from './member-eligibility.js'
 import { playerMessageLabel } from './contact-numbers.js'
@@ -42,10 +43,14 @@ export function battleCSV({ clanName, clanTag, type, season = '', rounds, regist
   return '\uFEFF'+rows.map(row=>row.map(csvCell).join(',')).join('\r\n')
 }
 export function battlePending(entry, clanTag, label, fallback = 1, members = []) {
-  return (ownSide(entry.war,clanTag)?.members || []).flatMap(member => {
+  const side=ownSide(entry.war,clanTag), ended=entry.war?.state==='warEnded'
+  const limit=entry.war?.attacksPerMember??(fallback===1?1:null)
+  if(ended&&(limit!==fallback||!confirmedEnd(entry.war,'warEnded')||!completeWarAttacks(entry.war,side,limit)))return []
+  if(!ended&&Number.isFinite(clashTime(entry.war?.endTime))&&clashTime(entry.war.endTime)<=Date.now())return []
+  return (side?.members || []).flatMap(member => {
     if (entryEligibility(members.find(m => tagKey(m.tag) === tagKey(member.tag)), entry.war)) return []
     const status = battleStatus(entry.war, member, fallback)
-    return status.remaining ? [{tag:member.tag,name:member.name,activity:label,used:status.used,limit:status.limit,ended:entry.war.state==='warEnded',verify:false}] : []
+    return status.remaining && (!ended || status.used === 0) ? [{tag:member.tag,name:member.name,activity:label,used:status.used,limit:status.limit,ended:entry.war.state==='warEnded',verify:false}] : []
   })
 }
 export function filterBattleWarnings(items, attacks = 'all') {
@@ -56,16 +61,20 @@ export function filterBattleWarnings(items, attacks = 'all') {
 export function raidPending(record, now = Date.now(), members = []) {
   if (!record?.season) return []
   const season = record.season
-  const end = Date.parse(String(season.endTime || '').replace(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})\.000Z$/, '$1-$2-$3T$4:$5:$6Z'))
-  const ended = season.state === 'ended' || (Number.isFinite(end) && end <= now)
+  const ended=confirmedEnd(season,'ended',now)
+  if(season.state==='ended'&&(!ended||!completeRaidAttacks(season)))return []
+  if(season.state!=='ended'&&(season.state!=='ongoing'||clashTime(season.endTime)<=now))return []
   const players = new Map((season.members || []).map(m=>[tagKey(m.tag),m]))
   const roster = new Map((record.roster || []).map(m=>[tagKey(m.tag),m]))
   const combined = new Map([...roster,...players])
   return [...combined.values()].flatMap(member=>{
     if (entryEligibility(members.find(m => tagKey(m.tag) === tagKey(member.tag)), season)) return []
-    const attacker = players.get(tagKey(member.tag)), used = attacker?.attacks || 0
+    const attacker = players.get(tagKey(member.tag)), used = attacker ? attacker.attacks : 0
+    if(!Number.isInteger(used)||used<0)return []
     if (!attacker && !record.rosterDuringRaid) return []
-    const limit = attacker?.attackLimit == null ? null : attacker.attackLimit+(attacker.bonusAttackLimit||0)
+    const bonus=attacker?.bonusAttackLimit??0
+    const limit=attacker?.attackLimit==null?null:attacker.attackLimit+bonus
+    if(attacker&&(!Number.isInteger(attacker.attackLimit)||attacker.attackLimit<1||!Number.isInteger(bonus)||bonus<0||bonus>1||limit>6))return []
     if (limit == null ? used > 0 : used >= limit) return []
     return [{tag:member.tag,name:member.name,activity:'Raids · '+String(season.startTime||'').slice(0,8),used,limit,ended,verify:!attacker||!record.rosterDuringRaid}]
   })
