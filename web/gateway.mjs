@@ -38,15 +38,28 @@ export function createGateway({apiBase,dist=resolve('dist'),fetcher=fetch}){
    }catch{fail(res,502,'Não foi possível carregar a liderança pública.')}
    return
   }
+  const pushRoutes=new Set(['GET /api/push/config','GET /api/push/announcements','POST /api/push/subscription','DELETE /api/push/subscription'])
+  if(pushRoutes.has(req.method+' '+path)){
+   if(!allowedOrigin(req)){fail(res,403,'Origem não autorizada.');return}
+   if(!['GET','HEAD'].includes(req.method)&&req.headers['x-clanboard-request']!=='1'){fail(res,403,'Proteção de gravação ausente.');return}
+   try{
+    const headers=new Headers({'content-type':req.headers['content-type']||'application/json','x-clanboard-request':'1'})
+    const upstream=await fetcher(apiURL(base,path,query),{method:req.method,headers,body:req.method==='GET'?undefined:req,duplex:'half',redirect:'manual',signal:AbortSignal.timeout(15000)})
+    res.writeHead(upstream.status,responseHeaders(upstream))
+    if(!upstream.body)res.end();else await pipeline(Readable.fromWeb(upstream.body),res)
+   }catch{if(!res.headersSent)fail(res,502,'Não foi possível acessar os avisos.');else res.destroy()}
+   return
+  }
+  const pwaFiles=new Map([['/instalar','install.html'],['/app','member.html'],...['member.js','member.css','member.webmanifest','pwa-sw.js','pwa-state.js','pwa-state-worker.js','app-icon-180.png','app-icon-192.png','app-icon-512.png'].map(name=>['/'+name,name])])
   const host=String(req.headers.host||'').toLowerCase().replace(/:\d+$/,'')
-  if(['imperiobarbaro.com.br','www.imperiobarbaro.com.br'].includes(host)){
+  if(['imperiobarbaro.com.br','www.imperiobarbaro.com.br'].includes(host)||pwaFiles.has(path)){
    if(!['GET','HEAD'].includes(req.method)){fail(res,405,'Método não permitido.');return}
    if(path==='/'){try{const upstream=await fetcher(apiURL(base,'/public/home'),{method:'GET',redirect:'manual',signal:AbortSignal.timeout(10000)});if(!upstream.ok){fail(res,502,'Não foi possível carregar a página pública.');return};res.writeHead(200,{'content-type':'text/html; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff','content-security-policy':"default-src 'self'; script-src 'self'; style-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'"});res.end(req.method==='HEAD'?undefined:await upstream.text())}catch{fail(res,502,'Não foi possível carregar a página pública.')};return}
-   const name=new Map([['/','home.html'],['/home.css','home.css'],['/home.js','home.js'],['/icon.svg','icon.svg'],['/sw.js','sw.js'],['/imperio-hero-768.webp','imperio-hero-768.webp'],['/imperio-hero-1536.webp','imperio-hero-1536.webp']]).get(path)
+   const name=pwaFiles.get(path)||new Map([['/','home.html'],['/home.css','home.css'],['/home.js','home.js'],['/icon.svg','icon.svg'],['/sw.js','sw.js'],['/imperio-hero-768.webp','imperio-hero-768.webp'],['/imperio-hero-1536.webp','imperio-hero-1536.webp']]).get(path)
    if(!name){fail(res,404,'Página não encontrada.');return}
    const filename=resolve(root,name),info=await stat(filename).catch(()=>null)
    if(!info?.isFile()){fail(res,404,'Arquivo não encontrado.');return}
-   res.writeHead(200,{'content-type':types[extname(filename)],'content-length':info.size,'cache-control':'no-store','x-content-type-options':'nosniff','x-frame-options':'DENY','referrer-policy':'no-referrer','content-security-policy':"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'"})
+   res.writeHead(200,{'content-type':types[extname(filename)]||'application/octet-stream','content-length':info.size,'cache-control':'no-store','x-content-type-options':'nosniff','x-frame-options':'DENY','referrer-policy':'no-referrer','content-security-policy':"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'"})
    if(req.method==='HEAD')res.end();else await pipeline(createReadStream(filename),res)
    return
   }

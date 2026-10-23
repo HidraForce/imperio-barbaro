@@ -40,6 +40,23 @@ O token e as senhas ficam no servidor. Não comite arquivos de ambiente, bancos 
 
 O site público não contém links para o painel. O painel continua com a autenticação existente. O acesso dos líderes é compartilhado; não há contas individuais ou autenticação multifator.
 
+## App dos membros e comunicados
+
+Compartilhe `https://imperiobarbaro.com.br/instalar` com novos membros. O app abre em `/app`, recebe notificações Web Push e mostra os últimos 30 comunicados do clã escolhido. A página pública também oferece o link de instalação. O painel mantém sua autenticação e tem a seção **Comunicados**.
+
+- Cinco mensagens prontas: guerra com zero ataques, segundo ataque da guerra, raids, jogos do clã e CWL (um ataque por rodada). As notificações são coletivas para o clã escolhido; não há vínculo individual entre celular e conta do jogo. O texto de guerra indica a quem se aplica.
+- Os dois botões de guerra exigem uma guerra normal em andamento com dois ataques por membro. O segundo exige 12 horas completas desde o início, conferidas no servidor. Os outros lembretes são enviados por decisão da liderança.
+- Cada botão, incluindo o personalizado, tem intervalo de uma hora por clã, aplicado no banco e compartilhado entre líderes, abas e reinícios. Sem inscritos, o envio não consome o intervalo.
+- O aviso personalizado exige a sessão da senha de Contatos; não aceita publicação pela rota de mensagens prontas. As sessões expiram em dez minutos e bloqueiam ao ocultar o painel.
+- A ativação inclui todas as categorias. No Android compatível, o botão de instalação só é oferecido após a permissão e a inscrição no servidor. No iPhone/iPad é obrigatório adicionar à tela inicial primeiro e ativar os avisos ao abrir pelo ícone. O navegador pode oferecer sua própria instalação fora desse fluxo.
+- Web Push usa `Urgency: high`, pede som e destaque quando suportados e respeita as configurações do aparelho. Não é possível forçar prioridade, som, permissão nem ignorar modos de foco. A inscrição confirma a configuração, não garante entrega ou leitura. O teste da página exibe uma notificação **local**; valide também um envio real do painel num Android e num iPhone em HTTPS.
+
+As chaves VAPID são criadas automaticamente e persistidas na tabela `push_keys`; preserve o banco e os backups para manter as inscrições. Não é necessária conta Firebase ou loja de aplicativos. As tabelas `push_subscriptions`, `announcements`, `announcement_cooldowns` e `push_jobs` armazenam inscrições, histórico, intervalos e fila. O servidor tenta a entrega a cada dez segundos, com até seis tentativas e validade de uma hora; remove inscrições expiradas (404/410). Os contadores do painel distinguem fila, aceitação pelo serviço e falhas. A fila requer o processo Go permanente da implantação Oracle; um ambiente que suspende o processo precisa de um worker equivalente.
+
+As únicas rotas públicas de notificações são `GET /api/push/config`, `GET /api/push/announcements?clan=1|2`, `POST /api/push/subscription` e `DELETE /api/push/subscription`. Gravações exigem origem correspondente, JSON e o cabeçalho de proteção. Endpoints de inscrição são restritos aos serviços de push conhecidos para impedir requisições a hosts arbitrários. Os comunicados publicados são públicos por clã, sem telefones ou dados disciplinares. O exportador legado SQLite→PostgreSQL cobre contatos e raids; para migrar o app com inscrições, preserve também as tabelas de push (especialmente as chaves VAPID).
+
+Os ícones PNG são derivados do escudo existente. Para regenerar: `python3 scripts/generate-app-icons.py`.
+
 ## Cache e segurança
 
 O cache da API dura cinco minutos para membros, um minuto para guerra/CWL e quinze minutos para raids. Consultas simultâneas compartilham a mesma chamada, e respostas 429 respeitam `Retry-After`. A sincronização acontece ao consultar o painel, sem coleta agendada.

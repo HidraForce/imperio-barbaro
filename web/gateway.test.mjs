@@ -5,6 +5,23 @@ import { mkdtemp, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createGateway, bindingURL } from './gateway.mjs'
+test('Member PWA and push endpoints stay public without exposing dashboard credentials',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'pwa-gateway-'))
+ await writeFile(join(dir,'install.html'),'<html>Instalar Império</html>')
+ await writeFile(join(dir,'member.webmanifest'),'{}')
+ const calls=[]
+ const handler=createGateway({dist:dir,apiBase:'https://api.internal',fetcher:async(url,options)=>{calls.push({url:String(url),options});return new Response('{"subscribed":true}',{headers:{'content-type':'application/json'}})}})
+ try{
+  assert.equal((await invoke(handler,'/instalar',{host:'imperiobarbaro.com.br'})).code,200)
+  const manifest=await invoke(handler,'/member.webmanifest',{host:'imperiobarbaro.com.br'});assert.equal(manifest.code,200);assert.equal(manifest.headers['content-type'],'application/manifest+json; charset=utf-8')
+  const headers={host:'imperiobarbaro.com.br',authorization:'Basic private','x-contacts-session':'secret','content-type':'application/json','x-clanboard-request':'1'}
+  assert.equal((await invoke(handler,'/api/push/subscription',headers,'POST','{}')).code,200)
+  assert.equal(calls.at(-1).options.headers.get('authorization'),null)
+  assert.equal(calls.at(-1).options.headers.get('x-contacts-session'),null)
+  assert.equal((await invoke(handler,'/api/push/subscription',{...headers,origin:'https://evil.test'},'POST','{}')).code,403)
+  assert.equal((await invoke(handler,'/api/announcements',{host:'imperiobarbaro.com.br'},'POST','{}')).code,405)
+ }finally{await rm(dir,{recursive:true})}
+})
 class Reply extends Writable {
  constructor(){super();this.headersSent=false;this.data='';this.chunks=[];this.code=0;this.headers={}}
  writeHead(code,headers){this.code=code;this.headers=headers;this.headersSent=true}

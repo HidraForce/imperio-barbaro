@@ -99,7 +99,7 @@ export function createContactVault(fetcher = (...args) => fetch(...args)) {
   function edit(contact) { if (!unlocked.value||busy.value) return; form.value={id:contact.id,realName:contact.realName,phone:contact.phone,notes:contact.notes,accounts:contact.accounts.map(account=>({...account}))};showForm.value=true;error.value='' }
   function addAccount() { if (form.value.accounts.length<20) form.value.accounts.push(emptyAccount()) }
   function removeAccount(index) { if(form.value.accounts.length>1) form.value.accounts.splice(index,1) }
-  return { contacts, form, password, unlocked, busy, error, showForm, unlock, lock, refresh, startNew, edit, addAccount, removeAccount,
+  return { contacts, form, password, unlocked, busy, error, showForm, unlock, lock, refresh, startNew, edit, addAccount, removeAccount, request,
     merge: (targetId,sourceId) => change('/api/contacts/merge', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({targetId:Number(targetId),sourceId:Number(sourceId)})}),
     save: () => change('/api/contacts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form.value) }),
     remove: id => change('/api/contacts/' + id, { method: 'DELETE' }),

@@ -39,6 +39,7 @@ type app struct {
 	retryAt       time.Time
 	moderationMu  sync.Mutex
 	membersMu     sync.Mutex
+	notifications *notificationService
 }
 
 func main() {
@@ -76,6 +77,10 @@ func main() {
 	if err := initMembers(db); err != nil {
 		log.Fatal(err)
 	}
+	notifications, err := initNotifications(db)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	if *importFile != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
@@ -104,6 +109,7 @@ func main() {
 		clanTags:      map[string]string{"1": normalizeTag(os.Getenv("CLAN_TAG1")), "2": normalizeTag(os.Getenv("CLAN_TAG2"))},
 		staticFS:      assets,
 		contactsVault: vault,
+		notifications: notifications,
 	}
 	r := chi.NewRouter()
 	r.Use(secureHeaders)
@@ -123,6 +129,8 @@ func main() {
 	r.Put("/api/moderation/{id}", a.saveModeration)
 	r.Put("/api/moderation-settings", a.saveModerationSettings)
 	r.Post("/api/moderation/sync", a.syncModeration)
+	r.Get("/api/announcements", a.announcementStatus)
+	r.Post("/api/announcements", a.sendAnnouncement)
 	r.Get("/api/clan", a.clan)
 	r.Get("/api/war", a.war)
 	r.Get("/api/raids", a.raids)
@@ -133,6 +141,7 @@ func main() {
 	r.Delete("/api/contacts/session", a.contactsVault.lock)
 	r.Group(func(r chi.Router) {
 		r.Use(a.contactsVault.protect)
+		r.Post("/api/announcements/custom", a.sendAnnouncement)
 		r.Get("/api/contacts", a.contacts)
 		r.Post("/api/contacts", a.saveContact)
 		r.Post("/api/contacts/merge", a.mergeContact)
@@ -143,7 +152,8 @@ func main() {
 	port := env("PORT", "2025")
 	log.Printf("Painel disponível na porta :%s", port)
 	go a.runAutomaticWarnings()
-	log.Fatal(secureServer(":"+port, secureHeaders(a.publicContent(publicHome(assets, r, a.renderHome)))).ListenAndServe())
+	go a.runPushDelivery()
+	log.Fatal(secureServer(":"+port, secureHeaders(a.publicPush(a.publicContent(publicHome(assets, r, a.renderHome))))).ListenAndServe())
 }
 
 func (a *app) config(w http.ResponseWriter, _ *http.Request) {
