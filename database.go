@@ -71,6 +71,9 @@ func (d *database) Begin() (*databaseTx, error) { return d.BeginTx(context.Backg
 func (t *databaseTx) ExecContext(ctx context.Context, q string, args ...any) (sql.Result, error) {
 	return t.Tx.ExecContext(ctx, sqlParameters(q, t.postgres), args...)
 }
+func (t *databaseTx) QueryContext(ctx context.Context, q string, args ...any) (*sql.Rows, error) {
+	return t.Tx.QueryContext(ctx, sqlParameters(q, t.postgres), args...)
+}
 func (t *databaseTx) QueryRowContext(ctx context.Context, q string, args ...any) *sql.Row {
 	return t.Tx.QueryRowContext(ctx, sqlParameters(q, t.postgres), args...)
 }
