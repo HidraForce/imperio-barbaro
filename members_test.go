@@ -137,7 +137,7 @@ func TestCollectWarningsProtectsArrivalsAfterHistoricalEvents(t *testing.T) {
 				body, status := `{"items":[]}`, 200
 				switch {
 				case strings.HasSuffix(r.URL.Path, "/currentwar"):
-					body = `{"state":"warEnded","startTime":"` + now.Add(-48*time.Hour).Format("20060102T150405.000Z") + `","endTime":"` + now.Add(-24*time.Hour).Format("20060102T150405.000Z") + `","clan":{"tag":"#P0Y8LQ","members":[{"tag":"#QY8L0P","name":"Novo"}]}}`
+					body = `{"state":"warEnded","teamSize":1,"attacksPerMember":2,"startTime":"` + now.Add(-48*time.Hour).Format("20060102T150405.000Z") + `","endTime":"` + now.Add(-24*time.Hour).Format("20060102T150405.000Z") + `","clan":{"tag":"#P0Y8LQ","attacks":0,"members":[{"tag":"#QY8L0P","name":"Novo"}]}}`
 				case strings.HasSuffix(r.URL.Path, "/leaguegroup"):
 					body, status = `{"reason":"notFound"}`, 404
 				case strings.HasSuffix(r.URL.Path, "/clans/#P0Y8LQ"):

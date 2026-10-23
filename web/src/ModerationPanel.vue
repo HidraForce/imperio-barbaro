@@ -67,7 +67,7 @@ async function toggleAutomatic(event) {
   event.target.checked = settings.value.automatic
 }
 async function sync() {
-  await perform(async () => { const result = await adminAPI(url('/api/moderation/sync'), { method: 'POST', body: '{}' }); await load(); feedback.value = `${result.created} novo(s) aviso(s). Ocorrências existentes e removidas não são duplicadas.` })
+  await perform(async () => { const result = await adminAPI(url('/api/moderation/sync'), { method: 'POST', body: '{}' }); await load(); feedback.value = `${result.created} nova(s) ocorrência(s) de eventos encerrados. Registros ainda não revisados foram comparados à contagem final; decisões da liderança e registros removidos foram preservados.` })
 }
 async function copy(record) {
   const phones=props.phones,members=props.members
@@ -86,12 +86,12 @@ onUnmounted(() => clearInterval(expiryTimer))
     <button v-if="!loaded && !busy" class="secondary" @click="perform(load)">Tentar novamente</button>
     <template v-if="loaded">
       <fieldset :disabled="busy"><legend>Avisos automáticos</legend>
-        <label class="check-label"><input type="checkbox" :checked="settings.automatic" @change="toggleAutomatic"> Consultar automaticamente a cada 15 minutos</label>
-        <p class="report-note">Guerra/CWL: somente jogadores escalados com zero ataques em atividades encerradas. Raids: zero ataques exige conferir elegibilidade e participação em outro clã antes de contar como aviso. Dados ausentes e ataques parciais não geram avisos automáticos. A primeira consulta considera os últimos sete dias disponíveis; guerras antigas que já saíram da API não podem ser recuperadas.</p>
+        <label class="check-label"><input type="checkbox" :checked="settings.automatic" @change="toggleAutomatic"> Conferir eventos encerrados a cada 15 minutos</label>
+        <p class="report-note">A conferência só gera ocorrências após o horário de término e a confirmação de encerramento pela API, com escalação e contagens finais completas. Guerra/CWL: apenas jogadores escalados com zero ataques. Raids: qualquer ataque disponível não usado, incluindo bônus já liberado; as ocorrências ficam a conferir antes de contar como aviso. A primeira consulta considera os últimos sete dias disponíveis; guerras antigas que já saíram da API não podem ser recuperadas.</p>
         <p class="report-note">A lista de raids precisa ter sido capturada durante o evento para identificar quem não participou. Ative a automação antes do próximo fim de semana para registrar essa lista. Entradas/retornos são acompanhados a cada 15 minutos: quem comprovadamente entrou depois do evento é excluído; entrada durante o evento ou data incerta fica a conferir e não conta como aviso ativo. O primeiro registro é uma referência, não a data real de entrada. Nenhuma mensagem ou expulsão é executada automaticamente.</p>
         <p v-if="settings.lastCheck" class="report-note">Última consulta: {{ new Date(settings.lastCheck).toLocaleString('pt-BR') }}</p>
         <p v-for="problem in settings.problems" :key="problem" class="notice error">{{ problem }}</p>
-        <div class="editor-actions"><button class="secondary" @click="sync">Verificar zero ataques agora</button><button class="secondary" @click="perform(load)">Atualizar histórico</button></div>
+        <div class="editor-actions"><button class="secondary" @click="sync">Conferir eventos encerrados</button><button class="secondary" @click="perform(load)">Atualizar histórico</button></div>
       </fieldset>
       <section v-if="summary.length" class="discipline-decisions"><h3>Situação dos membros</h3><p v-if="decisions.length">{{ decisions.length }} membro(s) aguardando decisão da liderança.</p>
         <article v-for="player in summary" :key="player.tag" class="discipline-player">
