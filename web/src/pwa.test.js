@@ -2,7 +2,23 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import vm from 'node:vm'
-import { memberSetup } from '../public/pwa-state.js'
+import { memberSetup, memberClan, memberAppURL } from '../public/pwa-state.js'
+
+test('Untrusted clan values cannot change member navigation or inject query parameters',()=>{
+ const origin='https://imperiobarbaro.com.br'
+ for(const clan of ['1','2']){
+  assert.equal(memberClan(clan),clan)
+  const url=new URL(memberAppURL(clan),origin)
+  assert.equal(url.origin,origin)
+  assert.equal(url.pathname,'/app')
+  assert.equal(url.searchParams.get('clan'),clan)
+  assert.deepEqual([...url.searchParams.keys()],['clan'])
+ }
+ for(const value of [null,undefined,1,2,'','3',' 1','1&redirect=https://evil.test','//evil.test','javascript:alert(1)','<img src=x onerror=alert(1)>']){
+  assert.equal(memberClan(value),'')
+  assert.equal(memberAppURL(value),'/app')
+ }
+})
 
 test('Installation gate requires notification permission and a saved push subscription',()=>{
  const base={ios:false,installed:false,supported:true,permission:'default',subscribed:false}
