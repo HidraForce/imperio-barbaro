@@ -4,7 +4,7 @@ go 1.24
 
 require (
 	github.com/SherClockHolmes/webpush-go v1.4.0
-	github.com/go-chi/chi/v5 v5.2.3
+	github.com/go-chi/chi/v5 v5.2.4
 	github.com/jackc/pgx/v5 v5.7.6
 	modernc.org/sqlite v1.38.2
 )
