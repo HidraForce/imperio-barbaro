@@ -55,25 +55,26 @@ test('Worker displays closed-app pushes and only opens the member app on the sam
  assert.equal(intercepted,false,'private APIs must not be cached')
 })
 
-async function memberHarness({permission='granted',existing=true}={}){
+async function memberHarness({permission='granted',existing=true,saveFailure=false}={}){
+ let readFailure=false
  const elements=new Map(),listeners={},swListeners={}
  function element(id){if(!elements.has(id))elements.set(id,{value:'',hidden:false,disabled:false,textContent:'',classList:{add(){},toggle(){},contains(){return false}},addEventListener:(name,fn)=>listeners[id+':'+name]=fn,replaceChildren(){}});return elements.get(id)}
  let activate,registered
  const ready=new Promise(resolve=>activate=resolve),registeredPromise=new Promise(resolve=>registered=resolve)
  const requests=[],subscription={toJSON:()=>({endpoint:'device-only'})}
- const activeRegistration={pushManager:{getSubscription:async()=>existing?subscription:null,subscribe:async()=>{existing=true;return subscription}}}
+ const activeRegistration={pushManager:{getSubscription:async()=>{if(readFailure)throw Error('Não foi possível ler a inscrição agora.');return existing?subscription:null},subscribe:async()=>{existing=true;return subscription}}}
  const context=vm.createContext({memberSetup,memberClan,memberAppURL,URL,URLSearchParams,Uint8Array,atob,
   isSecureContext:true,PushManager:function(){},Notification:{permission,requestPermission:async()=>{context.Notification.permission='granted';return 'granted'}},
   navigator:{userAgent:'Android',platform:'Linux',serviceWorker:{register:async()=>{registered();return {pushManager:{getSubscription(){throw Error('Inactive registration used')}}}},ready,addEventListener:(name,fn)=>swListeners[name]=fn}},
   document:{hidden:false,body:{dataset:{page:'install'},classList:{toggle(){}}},getElementById:element,createElement:()=>element(Symbol()),addEventListener:(name,fn)=>listeners['document:'+name]=fn},
   matchMedia:()=>({matches:true}),localStorage:{getItem:()=> '1',setItem(){}},location:{search:'',pathname:'/instalar',hash:''},history:{replaceState(){}},
-  setInterval(){return 1},fetch:async(path,options)=>{requests.push({path,options});return {ok:true,json:async()=>path==='/api/push/config'?{publicKey:'AA'}:{accepted:true}}},addEventListener:(name,fn)=>listeners['window:'+name]=fn,
+  setInterval(){return 1},fetch:async(path,options)=>{requests.push({path,options});if(path==='/api/push/subscription'&&saveFailure){if(saveFailure==='offline')throw Error('Sem conexão.');return {ok:false,json:async()=>({error:'O servidor está indisponível.'})}}return {ok:true,json:async()=>path==='/api/push/config'?{publicKey:'AA'}:{accepted:true}}},addEventListener:(name,fn)=>listeners['window:'+name]=fn,
  })
  context.window=context
  const source=await readFile(new URL('../public/member.js',import.meta.url),'utf8')
  vm.runInContext(source.replace(/^import .*\n/,''),context)
  await registeredPromise
- return {elements,listeners,requests,context,activate:async()=>{activate(activeRegistration);await vm.runInContext('bootPromise',context)}}
+ return {elements,listeners,requests,context,setSaveFailure:value=>saveFailure=value,setReadFailure:value=>readFailure=value,setExisting:value=>existing=value,activate:async()=>{activate(activeRegistration);await vm.runInContext('bootPromise',context)}}
 }
 
 test('Installed app waits for the active worker and recognizes existing permission without another tap or reload',async()=>{
@@ -102,4 +103,54 @@ test('First activation immediately completes the installed app setup',async()=>{
  assert.equal(app.elements.get('enable-notifications').hidden,true)
  assert.equal(app.elements.get('setup-status').textContent,'Todos os avisos estão ativados.')
  assert.equal(app.elements.get('test-notification').hidden,false)
+})
+
+test('Returning from the dashboard with a failed sync preserves the subscription and never offers activation',async()=>{
+ for(const failure of ['http','offline']){
+  const app=await memberHarness()
+  await app.activate()
+  app.context.document.hidden=true
+  await app.listeners['document:visibilitychange']()
+  app.setSaveFailure(failure)
+  app.context.document.hidden=false
+  await app.listeners['document:visibilitychange']()
+  assert.equal(app.context.Notification.permission,'granted')
+  assert.equal(app.elements.get('enable-notifications').hidden,true)
+  assert.equal(app.elements.get('setup-status').textContent,'Permissão ativa. Verificação pendente.')
+  assert.equal(app.elements.get('retry-setup').hidden,false)
+  assert.equal(vm.runInContext('subscribed',app.context),true,'a connection error must not clear an already confirmed enrollment')
+  assert.ok(!app.requests.some(request=>request.options.method==='DELETE'))
+  app.setSaveFailure(false)
+  await app.listeners['retry-setup:click']()
+  assert.equal(app.elements.get('setup-status').textContent,'Todos os avisos estão ativados.')
+  assert.equal(app.elements.get('enable-notifications').hidden,true)
+  assert.equal(app.elements.get('action-feedback').textContent,'')
+ }
+})
+
+test('A temporary PushManager failure requests a recheck without presenting notifications as disabled',async()=>{
+ const app=await memberHarness()
+ await app.activate()
+ app.setReadFailure(true)
+ await app.listeners['window:focus']()
+ assert.equal(app.elements.get('enable-notifications').hidden,true)
+ assert.equal(app.elements.get('setup-status').textContent,'Permissão ativa. Verificação pendente.')
+ app.setReadFailure(false)
+ await app.listeners['window:focus']()
+ assert.equal(app.elements.get('setup-status').textContent,'Todos os avisos estão ativados.')
+ // A confirmed absent subscription really does require another activation.
+ app.setExisting(false)
+ await app.listeners['window:focus']()
+ assert.equal(app.elements.get('enable-notifications').hidden,false)
+})
+
+test('An existing device with a failing initial enrollment sync offers retry, not another permission request',async()=>{
+ const app=await memberHarness({saveFailure:true})
+ await app.activate()
+ assert.equal(app.elements.get('enable-notifications').hidden,true)
+ assert.equal(app.elements.get('retry-setup').hidden,false)
+ assert.equal(app.elements.get('setup-status').textContent,'Permissão ativa. Verificação pendente.')
+ app.context.Notification.permission='denied'
+ await app.listeners['window:focus']()
+ assert.equal(app.elements.get('setup-status').textContent,'Seus avisos estão bloqueados.')
 })
