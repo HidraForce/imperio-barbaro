@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -74,6 +75,9 @@ func initNotifications(db *database) (*notificationService, error) {
 		`CREATE TABLE IF NOT EXISTS announcement_cooldowns (clan_id TEXT NOT NULL, kind TEXT NOT NULL, next_at BIGINT NOT NULL, PRIMARY KEY(clan_id,kind))`,
 		`CREATE TABLE IF NOT EXISTS push_jobs (id TEXT PRIMARY KEY, announcement_id TEXT NOT NULL, subscription_id TEXT NOT NULL, state TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, next_at BIGINT NOT NULL, lease_until BIGINT NOT NULL DEFAULT 0)`,
 		`CREATE INDEX IF NOT EXISTS push_jobs_due ON push_jobs(state,next_at,lease_until)`,
+		`CREATE INDEX IF NOT EXISTS push_jobs_announcement ON push_jobs(announcement_id,state)`,
+		`CREATE INDEX IF NOT EXISTS announcements_recent ON announcements(clan_id,created_at DESC,id DESC)`,
+		`CREATE INDEX IF NOT EXISTS push_subscriptions_clan ON push_subscriptions(clan_id)`,
 	} {
 		if _, err = tx.Exec(query); err != nil {
 			return nil, err
@@ -88,6 +92,9 @@ func initNotifications(db *database) (*notificationService, error) {
 		}
 	}
 	if err != nil {
+		return nil, err
+	}
+	if err = maintainAnnouncementsTx(context.Background(), tx, time.Now().Unix()); err != nil {
 		return nil, err
 	}
 	if err = tx.Commit(); err != nil {
@@ -180,7 +187,7 @@ func (a *app) announcementList(ctx context.Context, clanID string) ([]announceme
 	 (SELECT COUNT(*) FROM push_jobs j WHERE j.announcement_id=a.id AND j.state='accepted'),
 	 (SELECT COUNT(*) FROM push_jobs j WHERE j.announcement_id=a.id AND j.state='pending'),
 	 (SELECT COUNT(*) FROM push_jobs j WHERE j.announcement_id=a.id AND j.state='failed')
-	 FROM announcements a WHERE a.clan_id=? ORDER BY a.created_at DESC,a.id DESC LIMIT 30`, clanID)
+	 FROM announcements a WHERE a.clan_id=? ORDER BY a.created_at DESC,a.id DESC LIMIT ?`, clanID, announcementHistoryLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -375,6 +382,10 @@ func (a *app) sendAnnouncement(w http.ResponseWriter, r *http.Request) {
 		securityError(w, 500, "Não foi possível registrar o envio.")
 		return
 	}
+	if err = maintainAnnouncementsTx(r.Context(), tx, now.Unix()); err != nil {
+		securityError(w, 500, "Não foi possível atualizar o histórico de avisos.")
+		return
+	}
 	if err = tx.Commit(); err != nil {
 		securityError(w, 500, "Não foi possível confirmar o envio.")
 		return
@@ -400,7 +411,10 @@ func (a *app) publicPush(next http.Handler) http.Handler {
 // redeliver after an ambiguous network failure; the client uses a stable tag.
 func (a *app) dispatchPush(ctx context.Context) {
 	now := time.Now().Unix()
-	_, _ = a.db.ExecContext(ctx, `UPDATE push_jobs SET state='failed' WHERE state='pending' AND announcement_id IN (SELECT id FROM announcements WHERE created_at<=?)`, now-3600)
+	if err := maintainAnnouncements(ctx, a.db, now); err != nil {
+		log.Printf("Não foi possível limpar o histórico de comunicados: %v", err)
+		return
+	}
 	rows, err := a.db.QueryContext(ctx, `SELECT id FROM push_jobs WHERE state='pending' AND next_at<=? AND lease_until<=? ORDER BY next_at LIMIT 40`, now, now)
 	if err != nil {
 		return
