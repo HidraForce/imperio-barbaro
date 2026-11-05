@@ -126,6 +126,43 @@ func TestSubscriptionValidationAndOwnership(t *testing.T) {
 	}
 }
 
+func TestRestorePushClanRequiresCompleteDeviceSubscription(t *testing.T) {
+	a, h := notificationTestApp(t)
+	s := enrollPush(t, h, "2")
+	restore := func(subscription webpush.Subscription) *httptest.ResponseRecorder {
+		return adminTestRequest(h, "POST", "https://imperiobarbaro.com.br/api/push/subscription/restore", map[string]any{"subscription": subscription}, false)
+	}
+	res := restore(s)
+	if res.Code != 200 || strings.TrimSpace(res.Body.String()) != `{"clanId":"2"}` {
+		t.Fatalf("device clan not restored: %d %s", res.Code, res.Body.String())
+	}
+	for _, bad := range []webpush.Subscription{
+		{Endpoint: s.Endpoint, Keys: webpush.Keys{P256dh: s.Keys.P256dh, Auth: base64.RawURLEncoding.EncodeToString([]byte("wrong-auth-value"))}},
+		{Endpoint: s.Endpoint, Keys: testPushSubscription(t).Keys},
+		testPushSubscription(t),
+	} {
+		res = restore(bad)
+		if res.Code != 200 || strings.TrimSpace(res.Body.String()) != `{"clanId":""}` {
+			t.Fatalf("another subscription revealed clan: %d %s", res.Code, res.Body.String())
+		}
+	}
+	if res = restore(webpush.Subscription{Endpoint: s.Endpoint}); res.Code != 400 {
+		t.Fatalf("endpoint alone accepted: %d", res.Code)
+	}
+	if res = adminTestRequest(h, "GET", "https://imperiobarbaro.com.br/api/push/subscription/restore", nil, false); res.Code == 200 {
+		t.Fatal("public GET exposed subscription data")
+	}
+	req := httptest.NewRequest("POST", "https://imperiobarbaro.com.br/api/push/subscription/restore", strings.NewReader(`{}`))
+	req.Header.Set("Origin", "https://evil.test")
+	req.Header.Set("X-Clanboard-Request", "1")
+	req.Header.Set("Content-Type", "application/json")
+	res = httptest.NewRecorder()
+	h.ServeHTTP(res, req)
+	if res.Code != 403 || pushCount(t, a, `SELECT COUNT(*) FROM push_subscriptions`) != 1 {
+		t.Fatal("restore bypassed origin protection or changed enrollment")
+	}
+}
+
 func TestAnnouncementCooldownAtomicAndPersisted(t *testing.T) {
 	a, h := notificationTestApp(t)
 	enrollPush(t, h, "1")

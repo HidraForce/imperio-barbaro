@@ -38,7 +38,7 @@ export function createGateway({apiBase,dist=resolve('dist'),fetcher=fetch}){
    }catch{fail(res,502,'Não foi possível carregar a liderança pública.')}
    return
   }
-  const pushRoutes=new Set(['GET /api/push/config','GET /api/push/announcements','POST /api/push/subscription','DELETE /api/push/subscription','POST /api/push/test'])
+  const pushRoutes=new Set(['GET /api/push/config','GET /api/push/announcements','POST /api/push/subscription','POST /api/push/subscription/restore','DELETE /api/push/subscription','POST /api/push/test'])
   if(pushRoutes.has(req.method+' '+path)){
    if(!allowedOrigin(req)){fail(res,403,'Origem não autorizada.');return}
    if(!['GET','HEAD'].includes(req.method)&&req.headers['x-clanboard-request']!=='1'){fail(res,403,'Proteção de gravação ausente.');return}

@@ -55,26 +55,27 @@ test('Worker displays closed-app pushes and only opens the member app on the sam
  assert.equal(intercepted,false,'private APIs must not be cached')
 })
 
-async function memberHarness({permission='granted',existing=true,saveFailure=false}={}){
+async function memberHarness({permission='granted',existing=true,saveFailure=false,clan='1',storageThrows=false,device,subscribeFailure=false}={}){
+ device??={permission,existing,localClan:clan,savedClan:existing?clan:'',subscribeCalls:0,permissionRequests:0}
  let readFailure=false
  const elements=new Map(),listeners={},swListeners={}
  function element(id){if(!elements.has(id))elements.set(id,{value:'',hidden:false,disabled:false,textContent:'',classList:{add(){},toggle(){},contains(){return false}},addEventListener:(name,fn)=>listeners[id+':'+name]=fn,replaceChildren(){}});return elements.get(id)}
  let activate,registered
  const ready=new Promise(resolve=>activate=resolve),registeredPromise=new Promise(resolve=>registered=resolve)
  const requests=[],subscription={toJSON:()=>({endpoint:'device-only'})}
- const activeRegistration={pushManager:{getSubscription:async()=>{if(readFailure)throw Error('Não foi possível ler a inscrição agora.');return existing?subscription:null},subscribe:async()=>{existing=true;return subscription}}}
+ const activeRegistration={pushManager:{getSubscription:async()=>{if(readFailure)throw Error('Não foi possível ler a inscrição agora.');return device.existing?subscription:null},subscribe:async()=>{device.subscribeCalls++;if(subscribeFailure)throw Error('Toque para reconectar.');device.existing=true;return subscription}}}
  const context=vm.createContext({memberSetup,memberClan,memberAppURL,URL,URLSearchParams,Uint8Array,atob,
-  isSecureContext:true,PushManager:function(){},Notification:{permission,requestPermission:async()=>{context.Notification.permission='granted';return 'granted'}},
+  isSecureContext:true,PushManager:function(){},Notification:{get permission(){return device.permission},set permission(value){device.permission=value},requestPermission:async()=>{device.permissionRequests++;device.permission='granted';return 'granted'}},
   navigator:{userAgent:'Android',platform:'Linux',serviceWorker:{register:async()=>{registered();return {pushManager:{getSubscription(){throw Error('Inactive registration used')}}}},ready,addEventListener:(name,fn)=>swListeners[name]=fn}},
   document:{hidden:false,body:{dataset:{page:'install'},classList:{toggle(){}}},getElementById:element,createElement:()=>element(Symbol()),addEventListener:(name,fn)=>listeners['document:'+name]=fn},
-  matchMedia:()=>({matches:true}),localStorage:{getItem:()=> '1',setItem(){}},location:{search:'',pathname:'/instalar',hash:''},history:{replaceState(){}},
-  setInterval(){return 1},fetch:async(path,options)=>{requests.push({path,options});if(path==='/api/push/subscription'&&saveFailure){if(saveFailure==='offline')throw Error('Sem conexão.');return {ok:false,json:async()=>({error:'O servidor está indisponível.'})}}return {ok:true,json:async()=>path==='/api/push/config'?{publicKey:'AA'}:{accepted:true}}},addEventListener:(name,fn)=>listeners['window:'+name]=fn,
+  matchMedia:()=>({matches:true}),localStorage:{getItem:()=>{if(storageThrows)throw Error('Storage unavailable');return device.localClan},setItem:(key,value)=>{if(storageThrows)throw Error('Storage unavailable');device.localClan=value}},location:{search:'',pathname:'/instalar',hash:''},history:{replaceState(){}},
+  setInterval(){return 1},fetch:async(path,options)=>{requests.push({path,options});if(path==='/api/push/subscription'&&saveFailure){if(saveFailure==='offline')throw Error('Sem conexão.');return {ok:false,json:async()=>({error:'O servidor está indisponível.'})}}if(path==='/api/push/subscription')device.savedClan=JSON.parse(options.body).clanId;return {ok:true,json:async()=>path==='/api/push/config'?{publicKey:'AA'}:path==='/api/push/subscription/restore'?{clanId:device.savedClan}:{accepted:true}}},addEventListener:(name,fn)=>listeners['window:'+name]=fn,
  })
  context.window=context
  const source=await readFile(new URL('../public/member.js',import.meta.url),'utf8')
  vm.runInContext(source.replace(/^import .*\n/,''),context)
  await registeredPromise
- return {elements,listeners,requests,context,setSaveFailure:value=>saveFailure=value,setReadFailure:value=>readFailure=value,setExisting:value=>existing=value,activate:async()=>{activate(activeRegistration);await vm.runInContext('bootPromise',context)}}
+ return {elements,listeners,requests,context,device,setSaveFailure:value=>saveFailure=value,setReadFailure:value=>readFailure=value,setExisting:value=>device.existing=value,setSubscribeFailure:value=>subscribeFailure=value,activate:async()=>{activate(activeRegistration);await vm.runInContext('bootPromise',context)}}
 }
 
 test('Installed app waits for the active worker and recognizes existing permission without another tap or reload',async()=>{
@@ -138,10 +139,12 @@ test('A temporary PushManager failure requests a recheck without presenting noti
  app.setReadFailure(false)
  await app.listeners['window:focus']()
  assert.equal(app.elements.get('setup-status').textContent,'Todos os avisos estão ativados.')
- // A confirmed absent subscription really does require another activation.
+ // With permission still granted, a missing subscription is repaired.
  app.setExisting(false)
  await app.listeners['window:focus']()
- assert.equal(app.elements.get('enable-notifications').hidden,false)
+ assert.equal(app.elements.get('enable-notifications').hidden,true)
+ assert.equal(app.device.subscribeCalls,1)
+ assert.equal(app.device.permissionRequests,0)
 })
 
 test('An existing device with a failing initial enrollment sync offers retry, not another permission request',async()=>{
@@ -153,4 +156,104 @@ test('An existing device with a failing initial enrollment sync offers retry, no
  app.context.Notification.permission='denied'
  await app.listeners['window:focus']()
  assert.equal(app.elements.get('setup-status').textContent,'Seus avisos estão bloqueados.')
+})
+
+test('Closing and reopening the installed app restores the same device without another permission request',async()=>{
+ const first=await memberHarness({permission:'default',existing:false,clan:'2'})
+ await first.activate()
+ await first.listeners['enable-notifications:click']()
+ assert.equal(first.device.permissionRequests,1)
+ const reopened=await memberHarness({device:first.device})
+ await reopened.activate()
+ assert.equal(reopened.elements.get('member-clan').value,'2')
+ assert.equal(reopened.elements.get('setup-status').textContent,'Todos os avisos estão ativados.')
+ assert.equal(reopened.device.subscribeCalls,1,'reuse the existing browser subscription')
+ assert.equal(reopened.device.permissionRequests,1,'reopening cannot ask permission again')
+})
+
+test('Reopening with a lost clan preference recovers only the enrolled device clan',async()=>{
+ for(const storageThrows of [false,true]){
+  const first=await memberHarness({clan:'2'})
+  await first.activate()
+  first.device.localClan=''
+  const reopened=await memberHarness({device:first.device,storageThrows})
+  await reopened.activate()
+  assert.equal(reopened.elements.get('member-clan').value,'2')
+  assert.equal(reopened.elements.get('enable-notifications').hidden,true)
+  assert.equal(reopened.elements.get('setup-status').textContent,'Todos os avisos estão ativados.')
+  const restored=reopened.requests.find(item=>item.path==='/api/push/subscription/restore')
+  assert.deepEqual(JSON.parse(restored.options.body),{subscription:{endpoint:'device-only'}})
+  assert.equal(reopened.device.savedClan,'2','never move the enrollment to a guessed clan')
+ }
+})
+
+test('A missing subscription on cold start is renewed with the granted permission',async()=>{
+ const first=await memberHarness({clan:'2'})
+ await first.activate()
+ first.device.existing=false
+ const reopened=await memberHarness({device:first.device})
+ await reopened.activate()
+ assert.equal(reopened.elements.get('setup-status').textContent,'Todos os avisos estão ativados.')
+ assert.equal(reopened.device.subscribeCalls,1)
+ assert.equal(reopened.device.permissionRequests,0)
+ assert.equal(reopened.device.savedClan,'2')
+})
+
+test('A browser requiring a tap for renewal offers reconnection without requesting permission again',async()=>{
+ const app=await memberHarness({existing:false,subscribeFailure:true})
+ await app.activate()
+ assert.equal(app.elements.get('enable-notifications').hidden,false)
+ assert.equal(app.elements.get('enable-notifications').textContent,'Reconectar avisos')
+ assert.equal(app.elements.get('setup-status').textContent,'Reconecte os avisos deste celular.')
+ app.setSubscribeFailure(false)
+ await app.listeners['enable-notifications:click']()
+ assert.equal(app.elements.get('setup-status').textContent,'Todos os avisos estão ativados.')
+ assert.equal(app.device.permissionRequests,0)
+})
+
+test('Reopening never subscribes with default or denied permission or an unknown clan',async()=>{
+ for(const options of [{permission:'default'},{permission:'denied'},{clan:''}]){
+  const app=await memberHarness({existing:false,...options})
+  await app.activate()
+  assert.equal(app.device.subscribeCalls,0)
+  assert.equal(app.device.permissionRequests,0)
+  assert.equal(app.elements.get('test-notification').hidden,true)
+ }
+})
+
+test('The offline shell keeps the latest successful version and never caches APIs or error pages',async()=>{
+ const listeners={},buckets=new Map([['imperio-members-v2',new Map([['/member.js',new Response('outdated')]])]])
+ const navigated=[]
+ let body='updated',status=200,offline=false,networkCache
+ const caches={keys:async()=>[...buckets.keys()],delete:async key=>buckets.delete(key),open:async key=>{
+  if(!buckets.has(key))buckets.set(key,new Map())
+  const cache=buckets.get(key)
+  return {put:async(path,response)=>cache.set(path,response),match:async path=>cache.get(path)?.clone()}
+ }}
+ const clients={claim:async()=>{},matchAll:async()=>['/app?clan=2#notice','/instalar','/','/dashboard','https://other.test/app'].map(path=>({url:new URL(path,'https://imperiobarbaro.com.br').href,navigate:url=>{navigated.push(url);return new Promise(()=>{})}}))}
+ const context=vm.createContext({URL,caches,fetch:async(request,options)=>{networkCache=options.cache;if(offline)throw Error('Offline');return new Response(body,{status})},self:{location:{origin:'https://imperiobarbaro.com.br'},clients,addEventListener:(name,fn)=>listeners[name]=fn},importScripts(){}})
+ vm.runInContext(await readFile(new URL('../public/pwa-sw.js',import.meta.url),'utf8'),context)
+ let pending
+ listeners.activate({waitUntil:p=>pending=p});await pending
+ assert.equal(buckets.has('imperio-members-v2'),false)
+ assert.deepEqual(navigated,['https://imperiobarbaro.com.br/app?clan=2#notice','https://imperiobarbaro.com.br/instalar'])
+ // First install / an already upgraded cache must not reload the app again.
+ listeners.activate({waitUntil:p=>pending=p});await pending
+ assert.equal(navigated.length,2)
+ const load=async(path,mode='cors')=>{
+  pending=undefined
+  listeners.fetch({request:{url:'https://imperiobarbaro.com.br'+path,method:'GET',mode},respondWith:p=>pending=p})
+  return pending
+ }
+ assert.equal(await (await load('/member.js')).text(),'updated')
+ assert.equal(networkCache,'no-store')
+ body='newest'
+ assert.equal(await (await load('/member.js')).text(),'newest')
+ offline=true
+ assert.equal(await (await load('/member.js')).text(),'newest')
+ offline=false;status=503;body='server error'
+ assert.equal(await (await load('/member.js')).text(),'newest')
+ assert.equal(await load('/api/push/config'),undefined)
+ assert.equal(await load('/api/contacts'),undefined)
+ assert.equal(await load('/assets/dashboard.js'),undefined)
 })
