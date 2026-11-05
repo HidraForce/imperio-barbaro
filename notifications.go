@@ -13,6 +13,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -54,6 +55,21 @@ var announcementTemplates = []announcementTemplate{
 	{"raids", "Raids do fim de semana", "🏰 Raids do fim de semana", "Não se esqueça dos ataques nas raids do fim de semana!"},
 	{"games", "Jogos do clã", "🎯 Jogos do clã", "Não se esqueça de fazer seus pontos nos jogos do clã!"},
 	{"cwl", "Liga de Guerra · CWL", "🏆 CWL · um ataque por rodada", "Está escalado na CWL? Não se esqueça do seu único ataque nesta rodada!"},
+}
+
+func announcementClanName(clanID string) string {
+	if clanID == "1" {
+		return "Império Bárbaro · Principal"
+	}
+	if clanID == "2" {
+		return "Império Bárbar2 · Academia"
+	}
+	return "Comunidade do Império"
+}
+
+func announcementPushPayload(item announcement) map[string]any {
+	clan := announcementClanName(item.ClanID)
+	return map[string]any{"id": item.ID, "clanId": item.ClanID, "clanName": clan, "title": clan + " · " + item.Title, "body": "Clã: " + clan + "\n" + item.Body, "url": "/app#" + item.ID}
 }
 
 func initNotifications(db *database) (*notificationService, error) {
@@ -136,7 +152,7 @@ func (a *app) pushConfig(w http.ResponseWriter, _ *http.Request) {
 		securityError(w, 503, "Os avisos estão indisponíveis. Tente novamente em instantes.")
 		return
 	}
-	jsonResponse(w, 200, map[string]any{"publicKey": a.notifications.publicKey, "clans": []map[string]string{{"id": "1", "name": "Império Bárbaro"}, {"id": "2", "name": "Império Bárbar2"}}})
+	jsonResponse(w, 200, map[string]any{"publicKey": a.notifications.publicKey, "clans": []map[string]string{{"id": "1", "name": announcementClanName("1")}, {"id": "2", "name": announcementClanName("2")}}})
 }
 
 // Browsers include expirationTime (usually null) in PushSubscription.toJSON().
@@ -155,9 +171,12 @@ func (a *app) subscribePush(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s := webpush.Subscription{Endpoint: input.Subscription.Endpoint, Keys: input.Subscription.Keys}
-	if !validPushSubscription(s) || (input.ClanID != "1" && input.ClanID != "2") {
-		securityError(w, 400, "Escolha seu clã e ative as notificações pelo navegador.")
+	if !validPushSubscription(s) {
+		securityError(w, 400, "Ative as notificações pelo navegador.")
 		return
+	}
+	if input.ClanID != "1" && input.ClanID != "2" {
+		input.ClanID = "all"
 	}
 	id := fmt.Sprintf("%x", sha256.Sum256([]byte(s.Endpoint)))
 	// The id is a capability, never returned in a public list. Deletion requires
@@ -235,20 +254,34 @@ func (a *app) announcementList(ctx context.Context, clanID string) ([]announceme
 
 func (a *app) publicAnnouncements(w http.ResponseWriter, r *http.Request) {
 	clanID := r.URL.Query().Get("clan")
-	if clanID != "1" && clanID != "2" {
-		securityError(w, 400, "Escolha seu clã.")
+	if clanID != "" && clanID != "all" && clanID != "1" && clanID != "2" {
+		securityError(w, 400, "Filtro de avisos inválido.")
 		return
 	}
-	items, err := a.announcementList(r.Context(), clanID)
-	if err != nil {
-		securityError(w, 500, "Não foi possível carregar os avisos.")
-		return
+	clans := []string{clanID}
+	if clanID == "" || clanID == "all" {
+		clans = []string{"1", "2"}
 	}
+	items := []announcement{}
+	for _, clan := range clans {
+		part, err := a.announcementList(r.Context(), clan)
+		if err != nil {
+			securityError(w, 500, "Não foi possível carregar os avisos.")
+			return
+		}
+		items = append(items, part...)
+	}
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].CreatedAt != items[j].CreatedAt {
+			return items[i].CreatedAt > items[j].CreatedAt
+		}
+		return items[i].ID > items[j].ID
+	})
 	// Member feeds contain only intentional collective messages, never contacts,
 	// disciplinary records, subscriptions or delivery metrics.
 	public := []map[string]any{}
 	for _, item := range items {
-		public = append(public, map[string]any{"id": item.ID, "title": item.Title, "body": item.Body, "createdAt": item.CreatedAt})
+		public = append(public, map[string]any{"id": item.ID, "clanId": item.ClanID, "clanName": announcementClanName(item.ClanID), "title": item.Title, "body": item.Body, "createdAt": item.CreatedAt})
 	}
 	jsonResponse(w, 200, map[string]any{"items": public})
 }
@@ -285,11 +318,11 @@ func (a *app) announcementStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var subscribers int
-	if err = a.db.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM push_subscriptions WHERE clan_id=?`, id).Scan(&subscribers); err != nil {
+	if err = a.db.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM push_subscriptions`).Scan(&subscribers); err != nil {
 		securityError(w, 500, "Não foi possível conferir as inscrições.")
 		return
 	}
-	jsonResponse(w, 200, map[string]any{"templates": announcementTemplates, "cooldowns": cooldowns, "items": items, "subscribers": subscribers, "serverTime": time.Now().Unix(), "customConfigured": a.customVault != nil && a.customVault.configured, "timerConfigured": a.timerVault != nil && a.timerVault.configured})
+	jsonResponse(w, 200, map[string]any{"clanName": announcementClanName(id), "templates": announcementTemplates, "cooldowns": cooldowns, "items": items, "subscribers": subscribers, "serverTime": time.Now().Unix(), "customConfigured": a.customVault != nil && a.customVault.configured, "timerConfigured": a.timerVault != nil && a.timerVault.configured})
 }
 
 func (a *app) warReminderReady(ctx context.Context, clanID string, second bool, now time.Time) error {
@@ -396,17 +429,17 @@ func (a *app) sendAnnouncement(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var recipients int
-	if err = tx.QueryRow(`SELECT COUNT(*) FROM push_subscriptions WHERE clan_id=?`, input.ClanID).Scan(&recipients); err != nil {
+	if err = tx.QueryRow(`SELECT COUNT(*) FROM push_subscriptions`).Scan(&recipients); err != nil {
 		securityError(w, 500, "Não foi possível conferir os inscritos.")
 		return
 	}
 	if recipients == 0 {
-		securityError(w, 409, "Este clã ainda não tem celulares com avisos ativados. Compartilhe a página de instalação.")
+		securityError(w, 409, "Ainda não há celulares com avisos ativados. Compartilhe a página de instalação.")
 		return
 	}
 	id := randomPushID()
 	if _, err = tx.Exec(`INSERT INTO announcements(id,clan_id,kind,title,body,created_at,recipients) VALUES(?,?,?,?,?,?,?)`, id, input.ClanID, input.Kind, input.Title, input.Body, now.Unix(), recipients); err == nil {
-		_, err = tx.Exec(`INSERT INTO push_jobs(id,announcement_id,subscription_id,state,next_at) SELECT ? || id,?,id,'pending',? FROM push_subscriptions WHERE clan_id=?`, id, id, now.Unix(), input.ClanID)
+		_, err = tx.Exec(`INSERT INTO push_jobs(id,announcement_id,subscription_id,state,next_at) SELECT ? || id,?,id,'pending',? FROM push_subscriptions`, id, id, now.Unix())
 	}
 	if err != nil {
 		securityError(w, 500, "Não foi possível registrar o envio.")
@@ -481,7 +514,7 @@ func (a *app) deliverPush(ctx context.Context, id string) {
 	var s webpush.Subscription
 	var subscriptionID string
 	var attempts int
-	err = a.db.QueryRowContext(ctx, `SELECT a.id,a.clan_id,a.title,a.body,a.created_at,s.id,s.endpoint,s.p256dh,s.auth,j.attempts FROM push_jobs j JOIN announcements a ON a.id=j.announcement_id JOIN push_subscriptions s ON s.id=j.subscription_id WHERE j.id=? AND s.clan_id=a.clan_id`, id).Scan(&item.ID, &item.ClanID, &item.Title, &item.Body, &item.CreatedAt, &subscriptionID, &s.Endpoint, &s.Keys.P256dh, &s.Keys.Auth, &attempts)
+	err = a.db.QueryRowContext(ctx, `SELECT a.id,a.clan_id,a.title,a.body,a.created_at,s.id,s.endpoint,s.p256dh,s.auth,j.attempts FROM push_jobs j JOIN announcements a ON a.id=j.announcement_id JOIN push_subscriptions s ON s.id=j.subscription_id WHERE j.id=?`, id).Scan(&item.ID, &item.ClanID, &item.Title, &item.Body, &item.CreatedAt, &subscriptionID, &s.Endpoint, &s.Keys.P256dh, &s.Keys.Auth, &attempts)
 	if err == sql.ErrNoRows {
 		_, _ = a.db.ExecContext(ctx, `UPDATE push_jobs SET state='failed' WHERE id=?`, id)
 		return
@@ -493,7 +526,7 @@ func (a *app) deliverPush(ctx context.Context, id string) {
 		_, _ = a.db.ExecContext(ctx, `UPDATE push_jobs SET state='failed' WHERE id=?`, id)
 		return
 	}
-	status, sendErr := a.sendPushPayload(ctx, s, map[string]any{"id": item.ID, "title": item.Title, "body": item.Body, "url": "/app?clan=" + item.ClanID + "#" + item.ID}, max(1, int(item.CreatedAt+3600-now)))
+	status, sendErr := a.sendPushPayload(ctx, s, announcementPushPayload(item), max(1, int(item.CreatedAt+3600-now)))
 	state := "pending"
 	if sendErr == nil && status >= 200 && status < 300 {
 		state = "accepted"
