@@ -223,17 +223,23 @@ test('Reopening never subscribes with default or denied permission or an unknown
 
 test('The offline shell keeps the latest successful version and never caches APIs or error pages',async()=>{
  const listeners={},buckets=new Map([['imperio-members-v2',new Map([['/member.js',new Response('outdated')]])]])
+ const navigated=[]
  let body='updated',status=200,offline=false,networkCache
  const caches={keys:async()=>[...buckets.keys()],delete:async key=>buckets.delete(key),open:async key=>{
   if(!buckets.has(key))buckets.set(key,new Map())
   const cache=buckets.get(key)
   return {put:async(path,response)=>cache.set(path,response),match:async path=>cache.get(path)?.clone()}
  }}
- const context=vm.createContext({URL,caches,fetch:async(request,options)=>{networkCache=options.cache;if(offline)throw Error('Offline');return new Response(body,{status})},self:{location:{origin:'https://imperiobarbaro.com.br'},clients:{claim:async()=>{}},addEventListener:(name,fn)=>listeners[name]=fn},importScripts(){}})
+ const clients={claim:async()=>{},matchAll:async()=>['/app?clan=2#notice','/instalar','/','/dashboard','https://other.test/app'].map(path=>({url:new URL(path,'https://imperiobarbaro.com.br').href,navigate:url=>{navigated.push(url);return new Promise(()=>{})}}))}
+ const context=vm.createContext({URL,caches,fetch:async(request,options)=>{networkCache=options.cache;if(offline)throw Error('Offline');return new Response(body,{status})},self:{location:{origin:'https://imperiobarbaro.com.br'},clients,addEventListener:(name,fn)=>listeners[name]=fn},importScripts(){}})
  vm.runInContext(await readFile(new URL('../public/pwa-sw.js',import.meta.url),'utf8'),context)
  let pending
  listeners.activate({waitUntil:p=>pending=p});await pending
  assert.equal(buckets.has('imperio-members-v2'),false)
+ assert.deepEqual(navigated,['https://imperiobarbaro.com.br/app?clan=2#notice','https://imperiobarbaro.com.br/instalar'])
+ // First install / an already upgraded cache must not reload the app again.
+ listeners.activate({waitUntil:p=>pending=p});await pending
+ assert.equal(navigated.length,2)
  const load=async(path,mode='cors')=>{
   pending=undefined
   listeners.fetch({request:{url:'https://imperiobarbaro.com.br'+path,method:'GET',mode},respondWith:p=>pending=p})

@@ -2,7 +2,21 @@ importScripts('/pwa-state-worker.js');
 const CACHE='imperio-members-v3';
 const SHELL=['/app','/member.js','/member.css','/pwa-state.js','/member.webmanifest','/app-icon-192.png','/app-icon-512.png','/app-icon-180.png','/notification-badge.png'];
 self.addEventListener('install',event=>{event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(SHELL)).then(()=>self.skipWaiting()))});
-self.addEventListener('activate',event=>{event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key.startsWith('imperio-members-')&&key!==CACHE).map(key=>caches.delete(key)))).then(()=>self.clients.claim()))});
+async function activateMembers(){
+ const previous=(await caches.keys()).filter(key=>key.startsWith('imperio-members-')&&key!==CACHE);
+ await Promise.all(previous.map(key=>caches.delete(key)));
+ await self.clients.claim();
+ if(!previous.length)return;
+ for(const client of await self.clients.matchAll({type:'window'})){
+  const url=new URL(client.url);
+  if(url.origin!==self.location.origin||!['/app','/instalar'].includes(url.pathname))continue;
+  // Existing pages may still run old JS. Reload public member pages once on
+  // upgrade, without clearing storage or subscriptions. Do not await navigation:
+  // the new document's requests need this activation event to finish first.
+  client.navigate(url.href).catch(()=>{});
+ }
+}
+self.addEventListener('activate',event=>event.waitUntil(activateMembers()));
 async function memberShell(request,path){
  const cache=await caches.open(CACHE);
  try{
