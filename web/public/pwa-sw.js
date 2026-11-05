@@ -1,14 +1,22 @@
 importScripts('/pwa-state-worker.js');
-const CACHE='imperio-members-v2';
+const CACHE='imperio-members-v3';
 const SHELL=['/app','/member.js','/member.css','/pwa-state.js','/member.webmanifest','/app-icon-192.png','/app-icon-512.png','/app-icon-180.png','/notification-badge.png'];
 self.addEventListener('install',event=>{event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(SHELL)).then(()=>self.skipWaiting()))});
 self.addEventListener('activate',event=>{event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key.startsWith('imperio-members-')&&key!==CACHE).map(key=>caches.delete(key)))).then(()=>self.clients.claim()))});
+async function memberShell(request,path){
+ const cache=await caches.open(CACHE);
+ try{
+  const response=await fetch(request,{cache:'no-store'});
+  if(response.ok){try{await cache.put(path,response.clone())}catch{}return response}
+  return await cache.match(path)||response;
+ }catch(error){const saved=await cache.match(path);if(saved)return saved;throw error}
+}
 self.addEventListener('fetch',event=>{
  if(event.request.method!=='GET')return;
  const url=new URL(event.request.url);
  if(url.origin!==self.location.origin)return;
- if(url.pathname==='/app'&&event.request.mode==='navigate'){event.respondWith(fetch(event.request).catch(()=>caches.match('/app')));return}
- if(SHELL.includes(url.pathname)&&url.pathname!=='/app'){event.respondWith(fetch(event.request).catch(()=>caches.match(url.pathname)))}
+ if(url.pathname==='/app'&&event.request.mode==='navigate'){event.respondWith(memberShell(event.request,'/app'));return}
+ if(SHELL.includes(url.pathname)&&url.pathname!=='/app'){event.respondWith(memberShell(event.request,url.pathname))}
 });
 self.addEventListener('push',event=>{
  let data={};try{data=event.data?.json()||{}}catch{}

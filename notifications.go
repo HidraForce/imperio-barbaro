@@ -185,6 +185,33 @@ func (a *app) unsubscribePush(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(204)
 }
 
+// Recover only this device's clan if its local preference was lost. The complete
+// browser subscription is the capability; an endpoint alone cannot reveal it.
+func (a *app) restorePush(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Subscription browserPushSubscription `json:"subscription"`
+	}
+	if !decodeAdminJSON(w, r, &input) {
+		return
+	}
+	s := webpush.Subscription{Endpoint: input.Subscription.Endpoint, Keys: input.Subscription.Keys}
+	if !validPushSubscription(s) {
+		securityError(w, 400, "Não foi possível conferir os avisos deste celular.")
+		return
+	}
+	var clan string
+	err := a.db.QueryRowContext(r.Context(), `SELECT clan_id FROM push_subscriptions WHERE endpoint=? AND p256dh=? AND auth=?`, s.Endpoint, s.Keys.P256dh, s.Keys.Auth).Scan(&clan)
+	if err == sql.ErrNoRows {
+		jsonResponse(w, 200, map[string]string{"clanId": ""})
+		return
+	}
+	if err != nil {
+		securityError(w, 500, "Não foi possível recuperar seu clã. Tente novamente.")
+		return
+	}
+	jsonResponse(w, 200, map[string]string{"clanId": clan})
+}
+
 func (a *app) announcementList(ctx context.Context, clanID string) ([]announcement, error) {
 	rows, err := a.db.QueryContext(ctx, `SELECT a.id,a.clan_id,a.kind,a.title,a.body,a.created_at,a.recipients,
 	 (SELECT COUNT(*) FROM push_jobs j WHERE j.announcement_id=a.id AND j.state='accepted'),
@@ -398,7 +425,7 @@ func (a *app) sendAnnouncement(w http.ResponseWriter, r *http.Request) {
 
 func (a *app) publicPush(next http.Handler) http.Handler {
 	routes := map[string]http.HandlerFunc{
-		"POST /api/push/test": a.testPush, "GET /api/push/config": a.pushConfig, "POST /api/push/subscription": a.subscribePush, "DELETE /api/push/subscription": a.unsubscribePush, "GET /api/push/announcements": a.publicAnnouncements,
+		"POST /api/push/test": a.testPush, "GET /api/push/config": a.pushConfig, "POST /api/push/subscription": a.subscribePush, "POST /api/push/subscription/restore": a.restorePush, "DELETE /api/push/subscription": a.unsubscribePush, "GET /api/push/announcements": a.publicAnnouncements,
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if handler, ok := routes[r.Method+" "+r.URL.Path]; ok {
