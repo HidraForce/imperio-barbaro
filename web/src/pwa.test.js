@@ -55,11 +55,11 @@ test('Worker displays closed-app pushes and only opens the member app on the sam
  assert.equal(intercepted,false,'private APIs must not be cached')
 })
 
-async function memberHarness({permission='granted',existing=true,saveFailure=false,clan='1',storageThrows=false,device,subscribeFailure=false}={}){
- device??={permission,existing,localClan:clan,savedClan:existing?clan:'',subscribeCalls:0,permissionRequests:0}
+async function memberHarness({permission='granted',existing=true,saveFailure=false,clan='1',storageThrows=false,device,subscribeFailure=false,page='install',feedItems=[]}={}){
+ device??={permission,existing,localClan:clan,enrolled:existing,subscribeCalls:0,permissionRequests:0,storageReads:0}
  let readFailure=false
  const elements=new Map(),listeners={},swListeners={}
- function element(id){if(!elements.has(id))elements.set(id,{value:'',hidden:false,disabled:false,textContent:'',classList:{add(){},toggle(){},contains(){return false}},addEventListener:(name,fn)=>listeners[id+':'+name]=fn,replaceChildren(){}});return elements.get(id)}
+ function element(id){if(id==='member-clan')return null;if(!elements.has(id))elements.set(id,{value:'',hidden:false,disabled:false,textContent:'',children:[],classList:{add(){},toggle(){},contains(){return false}},addEventListener:(name,fn)=>listeners[id+':'+name]=fn,append(...nodes){this.children.push(...nodes)},replaceChildren(...nodes){this.children=nodes}});return elements.get(id)}
  let activate,registered
  const ready=new Promise(resolve=>activate=resolve),registeredPromise=new Promise(resolve=>registered=resolve)
  const requests=[],subscription={toJSON:()=>({endpoint:'device-only'})}
@@ -67,9 +67,9 @@ async function memberHarness({permission='granted',existing=true,saveFailure=fal
  const context=vm.createContext({memberSetup,memberClan,memberAppURL,URL,URLSearchParams,Uint8Array,atob,
   isSecureContext:true,PushManager:function(){},Notification:{get permission(){return device.permission},set permission(value){device.permission=value},requestPermission:async()=>{device.permissionRequests++;device.permission='granted';return 'granted'}},
   navigator:{userAgent:'Android',platform:'Linux',serviceWorker:{register:async()=>{registered();return {pushManager:{getSubscription(){throw Error('Inactive registration used')}}}},ready,addEventListener:(name,fn)=>swListeners[name]=fn}},
-  document:{hidden:false,body:{dataset:{page:'install'},classList:{toggle(){}}},getElementById:element,createElement:()=>element(Symbol()),addEventListener:(name,fn)=>listeners['document:'+name]=fn},
-  matchMedia:()=>({matches:true}),localStorage:{getItem:()=>{if(storageThrows)throw Error('Storage unavailable');return device.localClan},setItem:(key,value)=>{if(storageThrows)throw Error('Storage unavailable');device.localClan=value}},location:{search:'',pathname:'/instalar',hash:''},history:{replaceState(){}},
-  setInterval(){return 1},fetch:async(path,options)=>{requests.push({path,options});if(path==='/api/push/subscription'&&saveFailure){if(saveFailure==='offline')throw Error('Sem conexão.');return {ok:false,json:async()=>({error:'O servidor está indisponível.'})}}if(path==='/api/push/subscription')device.savedClan=JSON.parse(options.body).clanId;return {ok:true,json:async()=>path==='/api/push/config'?{publicKey:'AA'}:path==='/api/push/subscription/restore'?{clanId:device.savedClan}:{accepted:true}}},addEventListener:(name,fn)=>listeners['window:'+name]=fn,
+  document:{hidden:false,body:{dataset:{page},classList:{toggle(){}}},getElementById:element,createElement:()=>element(Symbol()),addEventListener:(name,fn)=>listeners['document:'+name]=fn},
+  matchMedia:()=>({matches:true}),localStorage:{getItem:()=>{device.storageReads++;if(storageThrows)throw Error('Storage unavailable');return device.localClan},setItem:(key,value)=>{if(storageThrows)throw Error('Storage unavailable');device.localClan=value}},location:{search:'',pathname:'/instalar',hash:''},history:{replaceState(){}},
+  setInterval(){return 1},fetch:async(path,options)=>{requests.push({path,options});if(path==='/api/push/subscription'&&saveFailure){if(saveFailure==='offline')throw Error('Sem conexão.');return {ok:false,json:async()=>({error:'O servidor está indisponível.'})}}if(path==='/api/push/subscription')device.enrolled=true;if(path==='/api/push/subscription/restore')throw Error('Unexpected clan restoration');return {ok:true,json:async()=>path==='/api/push/config'?{publicKey:'AA'}:path==='/api/push/announcements'?{items:feedItems}:{accepted:true}}},addEventListener:(name,fn)=>listeners['window:'+name]=fn,
  })
  context.window=context
  const source=await readFile(new URL('../public/member.js',import.meta.url),'utf8')
@@ -97,13 +97,29 @@ test('Installed app waits for the active worker and recognizes existing permissi
 })
 
 test('First activation immediately completes the installed app setup',async()=>{
- const app=await memberHarness({permission:'default',existing:false})
+ const app=await memberHarness({permission:'default',existing:false,clan:'',storageThrows:true})
  await app.activate()
  assert.equal(app.elements.get('enable-notifications').hidden,false)
  await app.listeners['enable-notifications:click']()
  assert.equal(app.elements.get('enable-notifications').hidden,true)
  assert.equal(app.elements.get('setup-status').textContent,'Todos os avisos estão ativados.')
  assert.equal(app.elements.get('test-notification').hidden,false)
+ assert.deepEqual(JSON.parse(app.requests.find(item=>item.path==='/api/push/subscription').options.body),{subscription:{endpoint:'device-only'}})
+ assert.equal(app.device.storageReads,0)
+})
+
+test('The member feed shows notices from both clans with an explicit label and no clan selection',async()=>{
+ const items=[{id:'academy',clanId:'2',clanName:'Império Bárbar2 · Academia',title:'CWL',body:'Use seu ataque.',createdAt:200},{id:'main',clanId:'1',clanName:'Império Bárbaro · Principal',title:'Raids',body:'Use seus ataques.',createdAt:100}]
+ const app=await memberHarness({page:'member',feedItems:items,clan:''})
+ await app.activate()
+ await app.listeners['refresh-feed:click']()
+ assert.equal(app.elements.get('member-feed').hidden,false)
+ assert.ok(app.requests.some(item=>item.path==='/api/push/announcements'))
+ assert.ok(!app.requests.some(item=>item.path.includes('?clan=')))
+ const cards=app.elements.get('feed-items').children
+ assert.deepEqual(cards.map(card=>card.id),['academy','main'])
+ assert.deepEqual(cards.map(card=>card.children[1].textContent),['Império Bárbar2 · Academia','Império Bárbaro · Principal'])
+ for(const name of ['install.html','member.html'])assert.doesNotMatch(await readFile(new URL('../public/'+name,import.meta.url),'utf8'),/id="member-clan"/)
 })
 
 test('Returning from the dashboard with a failed sync preserves the subscription and never offers activation',async()=>{
@@ -165,25 +181,24 @@ test('Closing and reopening the installed app restores the same device without a
  assert.equal(first.device.permissionRequests,1)
  const reopened=await memberHarness({device:first.device})
  await reopened.activate()
- assert.equal(reopened.elements.get('member-clan').value,'2')
+ assert.equal(reopened.device.enrolled,true)
  assert.equal(reopened.elements.get('setup-status').textContent,'Todos os avisos estão ativados.')
  assert.equal(reopened.device.subscribeCalls,1,'reuse the existing browser subscription')
  assert.equal(reopened.device.permissionRequests,1,'reopening cannot ask permission again')
 })
 
-test('Reopening with a lost clan preference recovers only the enrolled device clan',async()=>{
+test('Reopening ignores missing or unavailable legacy clan storage and enrolls both clans',async()=>{
  for(const storageThrows of [false,true]){
   const first=await memberHarness({clan:'2'})
   await first.activate()
   first.device.localClan=''
   const reopened=await memberHarness({device:first.device,storageThrows})
   await reopened.activate()
-  assert.equal(reopened.elements.get('member-clan').value,'2')
   assert.equal(reopened.elements.get('enable-notifications').hidden,true)
   assert.equal(reopened.elements.get('setup-status').textContent,'Todos os avisos estão ativados.')
-  const restored=reopened.requests.find(item=>item.path==='/api/push/subscription/restore')
-  assert.deepEqual(JSON.parse(restored.options.body),{subscription:{endpoint:'device-only'}})
-  assert.equal(reopened.device.savedClan,'2','never move the enrollment to a guessed clan')
+  assert.equal(reopened.device.storageReads,0)
+  assert.deepEqual(JSON.parse(reopened.requests.find(item=>item.path==='/api/push/subscription').options.body),{subscription:{endpoint:'device-only'}})
+  assert.ok(!reopened.requests.some(item=>item.path==='/api/push/subscription/restore'))
  }
 })
 
@@ -196,7 +211,7 @@ test('A missing subscription on cold start is renewed with the granted permissio
  assert.equal(reopened.elements.get('setup-status').textContent,'Todos os avisos estão ativados.')
  assert.equal(reopened.device.subscribeCalls,1)
  assert.equal(reopened.device.permissionRequests,0)
- assert.equal(reopened.device.savedClan,'2')
+ assert.equal(reopened.device.enrolled,true)
 })
 
 test('A browser requiring a tap for renewal offers reconnection without requesting permission again',async()=>{
@@ -211,8 +226,8 @@ test('A browser requiring a tap for renewal offers reconnection without requesti
  assert.equal(app.device.permissionRequests,0)
 })
 
-test('Reopening never subscribes with default or denied permission or an unknown clan',async()=>{
- for(const options of [{permission:'default'},{permission:'denied'},{clan:''}]){
+test('Reopening never subscribes with default or denied permission',async()=>{
+ for(const options of [{permission:'default'},{permission:'denied'}]){
   const app=await memberHarness({existing:false,...options})
   await app.activate()
   assert.equal(app.device.subscribeCalls,0)

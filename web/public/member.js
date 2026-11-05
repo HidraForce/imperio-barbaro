@@ -1,4 +1,4 @@
-import { memberSetup, memberClan, memberAppURL } from './pwa-state.js'
+import { memberSetup } from './pwa-state.js'
 const byId=id=>document.getElementById(id)
 const ios=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1)
 const installed=()=>matchMedia('(display-mode: standalone)').matches||navigator.standalone===true
@@ -7,7 +7,6 @@ let deferredInstall,registration,config,subscribed=false,busy=false,feedGenerati
 const permission=()=>('Notification'in window?Notification.permission:'default')
 window.addEventListener('beforeinstallprompt',event=>{event.preventDefault();deferredInstall=event;render()})
 window.addEventListener('appinstalled',()=>{deferredInstall=null;resumeSetup()})
-try{byId('member-clan').value=memberClan(localStorage.getItem('imperio-clan'))}catch{}
 async function request(path,options={}){
  const response=await fetch(path,{credentials:'omit',cache:'no-store',...options,headers:{'Content-Type':'application/json','X-Clanboard-Request':'1'}})
  const result=await response.json().catch(()=>({}))
@@ -16,16 +15,15 @@ async function request(path,options={}){
 }
 function step(text){const li=document.createElement('li');li.textContent=text;return li}
 function render(){
- const clan=memberClan(byId('member-clan').value),state=memberSetup({ios,installed:installed(),supported:supported(),permission:permission(),subscribed:subscribed&&!!clan,verificationFailed,subscriptionMissing})
+ const state=memberSetup({ios,installed:installed(),supported:supported(),permission:permission(),subscribed,verificationFailed,subscriptionMissing})
  document.body.classList.toggle('is-ready',state==='ready')
  for(const id of ['enable-notifications','install-app','install-instructions','retry-setup','test-notification','open-app'])byId(id).hidden=true
  byId('setup-status').className='setup-status'
- byId('member-clan').disabled=busy||checking
- const feedReady=document.body.dataset.page==='member'&&permission()==='granted'&&subscribed&&!!clan
+ const feedReady=document.body.dataset.page==='member'&&permission()==='granted'&&subscribed
  byId('member-feed').hidden=!feedReady
  if(!feedReady){feedGeneration++;byId('feed-items').replaceChildren()}
- if(checking){byId('setup-status').textContent='Verificando os avisos deste celular…';byId('setup-description').textContent='Conferindo a permissão e a inscrição do seu clã.';return}
- if(!config){byId('setup-status').textContent='Conecte-se para preparar o app.';byId('setup-description').textContent='Precisamos de internet para ativar os avisos do seu clã.';byId('retry-setup').hidden=false;return}
+ if(checking){byId('setup-status').textContent='Verificando os avisos deste celular…';byId('setup-description').textContent='Conferindo a permissão e a conexão dos avisos.';return}
+ if(!config){byId('setup-status').textContent='Conecte-se para preparar o app.';byId('setup-description').textContent='Precisamos de internet para ativar os avisos dos dois clãs.';byId('retry-setup').hidden=false;return}
  if(state==='install-first'){
   byId('setup-status').textContent='No iPhone, instale primeiro.'
   byId('setup-description').textContent='Depois, abra pelo ícone do Império e ative todos os avisos para concluir.'
@@ -43,9 +41,9 @@ function render(){
   byId('setup-description').textContent='Não conseguimos confirmar a conexão com os avisos agora. Verifique sua internet e toque em Verificar novamente.'
   byId('retry-setup').hidden=false
  }else if(state==='enable'||state==='reconnect'){
-  byId('setup-status').textContent=state==='reconnect'?'Reconecte os avisos deste celular.':clan?'Ative todos os avisos do clã.':'Primeiro, escolha seu clã.'
-  byId('setup-description').textContent=state==='reconnect'?'A permissão continua ativa. Toque abaixo para recuperar a conexão com os avisos.':'Permita as notificações de guerra, raids, jogos, CWL e comunicados. Você precisa ativá-las para concluir a preparação do app.'
-  byId('enable-notifications').hidden=false;byId('enable-notifications').disabled=busy||!clan||!registration
+  byId('setup-status').textContent=state==='reconnect'?'Reconecte os avisos deste celular.':'Ative os avisos dos dois clãs.'
+  byId('setup-description').textContent=state==='reconnect'?'A permissão continua ativa. Toque abaixo para recuperar a conexão com os avisos.':'Uma ativação para receber guerra, raids, jogos, CWL e comunicados dos dois clãs. Cada aviso informa a qual clã se refere.'
+  byId('enable-notifications').hidden=false;byId('enable-notifications').disabled=busy||!registration
   byId('enable-notifications').textContent=busy?'Conectando avisos…':state==='reconnect'?'Reconectar avisos':'Ativar todos os avisos'
  }else{
   byId('setup-status').classList.add('ready');byId('setup-status').textContent='Todos os avisos estão ativados.'
@@ -55,15 +53,14 @@ function render(){
    if(deferredInstall){byId('install-app').hidden=false;byId('install-app').disabled=busy}
    else{byId('install-instructions').hidden=false;byId('install-steps').replaceChildren(...['Abra o menu do navegador.','Escolha Instalar app ou Adicionar à tela inicial.','Se a opção ainda não aparecer, permaneça nesta página por alguns instantes e tente novamente.'].map(step))}
   }else{
-   byId('setup-description').textContent='Seu celular está pronto para receber os comunicados do clã.'
-   if(document.body.dataset.page==='install'){byId('open-app').hidden=false;byId('open-app').href=memberAppURL(clan)}
+   byId('setup-description').textContent='Você receberá avisos do Império Bárbaro (Principal) e do Império Bárbar2 (Academia). Cada comunicado identifica o clã.'
+   if(document.body.dataset.page==='install'){byId('open-app').hidden=false;byId('open-app').href='/app'}
   }
  }
 
 }
 function appKey(){return Uint8Array.from(atob(config.publicKey.replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0))}
-function rememberClan(clan){byId('member-clan').value=memberClan(clan);try{localStorage.setItem('imperio-clan',memberClan(clan))}catch{}}
-async function saveSubscription(subscription){await request('/api/push/subscription',{method:'POST',body:JSON.stringify({clanId:memberClan(byId('member-clan').value),subscription:subscription.toJSON()})})}
+async function saveSubscription(subscription){await request('/api/push/subscription',{method:'POST',body:JSON.stringify({subscription:subscription.toJSON()})})}
 async function sync(){
  if(busy)return
  const current=++setupGeneration
@@ -71,11 +68,7 @@ async function sync(){
  checking=true;busy=true;verificationFailed=false;subscriptionMissing=false;byId('action-feedback').textContent='';render()
  try{
   let subscription=await registration.pushManager.getSubscription()
-  if(subscription&&!memberClan(byId('member-clan').value)){
-   const saved=await request('/api/push/subscription/restore',{method:'POST',body:JSON.stringify({subscription:subscription.toJSON()})})
-   rememberClan(saved.clanId)
-  }
-  if(!memberClan(byId('member-clan').value)||permission()!=='granted'){subscribed=false}
+  if(permission()!=='granted'){subscribed=false}
   else{
    // Permission belongs to the browser. Repair a missing subscription only when
    // it is still granted; never request permission automatically on reopening.
@@ -89,7 +82,7 @@ async function sync(){
  render();if(subscribed)loadFeed()
 }
 byId('enable-notifications').addEventListener('click',async()=>{
- if(busy||!registration||!config||!byId('member-clan').value)return
+ if(busy||!registration||!config)return
  busy=true;verificationFailed=false;byId('action-feedback').textContent='';render()
  try{
   // Ask directly from the tap, before any network call (required on iOS).
@@ -108,7 +101,6 @@ byId('install-app').addEventListener('click',async()=>{
  try{await prompt.prompt();const choice=await prompt.userChoice;byId('action-feedback').textContent=choice.outcome==='accepted'?'Instalação solicitada. Procure o ícone do Império na tela inicial.':'Você pode instalar quando quiser. Os avisos precisam continuar ativados.'}catch{byId('action-feedback').textContent='Use a opção Instalar app no menu do navegador.'}
  render()
 })
-byId('member-clan').addEventListener('change',()=>{rememberClan(byId('member-clan').value);byId('action-feedback').textContent='';sync()})
 byId('retry-setup').addEventListener('click',()=>boot())
 byId('test-notification').addEventListener('click',async()=>{
  const button=byId('test-notification');button.disabled=true;byId('action-feedback').textContent='Enviando um teste só para este celular…'
@@ -122,13 +114,13 @@ byId('test-notification').addEventListener('click',async()=>{
 })
 async function loadFeed(){
  if(document.body.dataset.page!=='member'||!subscribed||permission()!=='granted')return
- const generation=++feedGeneration,clan=memberClan(byId('member-clan').value)
+ const generation=++feedGeneration
  byId('feed-status').textContent='Buscando avisos…'
  try{
-  const data=await request('/api/push/announcements?clan='+clan)
+  const data=await request('/api/push/announcements')
   if(generation!==feedGeneration)return
-  const cards=data.items.map(item=>{const card=document.createElement('article');card.className='feed-card';card.id=item.id;const time=document.createElement('time');time.dateTime=new Date(item.createdAt*1000).toISOString();time.textContent=new Date(item.createdAt*1000).toLocaleString('pt-BR');const title=document.createElement('h3');title.textContent=item.title;const p=document.createElement('p');p.textContent=item.body;card.append(time,title,p);return card})
-  byId('feed-items').replaceChildren(...cards);byId('feed-status').textContent=cards.length?'':'Os próximos avisos do seu clã aparecerão aqui.'
+  const cards=data.items.map(item=>{const card=document.createElement('article');card.className='feed-card';card.id=item.id;const time=document.createElement('time');time.dateTime=new Date(item.createdAt*1000).toISOString();time.textContent=new Date(item.createdAt*1000).toLocaleString('pt-BR');const clan=document.createElement('small');clan.className='feed-clan';clan.textContent=item.clanName||'Comunidade do Império';const title=document.createElement('h3');title.textContent=item.title;const p=document.createElement('p');p.textContent=item.body;card.append(time,clan,title,p);return card})
+  byId('feed-items').replaceChildren(...cards);byId('feed-status').textContent=cards.length?'':'Os próximos avisos dos dois clãs aparecerão aqui.'
   const linked=document.getElementById(location.hash.slice(1));if(linked?.classList.contains('feed-card')){linked.classList.add('highlighted');linked.scrollIntoView({block:'center',behavior:'instant'})}
  }catch(e){if(generation===feedGeneration)byId('feed-status').textContent='Você está sem acesso aos avisos agora. Verifique a internet e toque em Atualizar.'}
 }
@@ -151,8 +143,7 @@ async function prepare(){
  try{
   config=await request('/api/push/config')
   if('serviceWorker'in navigator){await navigator.serviceWorker.register('/pwa-sw.js',{updateViaCache:'none'});registration=await navigator.serviceWorker.ready}
-  // A notification link selects its clan without trusting arbitrary values.
-  const linked=memberClan(new URLSearchParams(location.search).get('clan'));if(linked){rememberClan(linked);history.replaceState(null,'',location.pathname+location.hash)}
+  if(new URLSearchParams(location.search).has('clan'))history.replaceState(null,'',location.pathname+location.hash)
   await sync()
  }catch(e){checking=false;verificationFailed=permission()==='granted';byId('action-feedback').textContent=e.message;render()}
 }
