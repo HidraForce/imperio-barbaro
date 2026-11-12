@@ -58,11 +58,11 @@ var announcementTemplates = []announcementTemplate{
 }
 
 func announcementClanName(clanID string) string {
-	if clanID == "1" {
-		return "Império Bárbaro · Principal"
-	}
-	if clanID == "2" {
-		return "Império Bárbar2 · Academia"
+	if clan, valid := findCommunityClan(clanID); valid {
+		if clan.AnnouncementLabel != "" {
+			return clan.Name + " · " + clan.AnnouncementLabel
+		}
+		return clan.Name + " · #" + clan.ProfileTag
 	}
 	return "Comunidade do Império"
 }
@@ -152,7 +152,11 @@ func (a *app) pushConfig(w http.ResponseWriter, _ *http.Request) {
 		securityError(w, 503, "Os avisos estão indisponíveis. Tente novamente em instantes.")
 		return
 	}
-	jsonResponse(w, 200, map[string]any{"publicKey": a.notifications.publicKey, "clans": []map[string]string{{"id": "1", "name": announcementClanName("1")}, {"id": "2", "name": announcementClanName("2")}}})
+	clans := make([]map[string]string, 0, len(communityClans))
+	for _, clan := range communityClans {
+		clans = append(clans, map[string]string{"id": clan.ID, "name": announcementClanName(clan.ID)})
+	}
+	jsonResponse(w, 200, map[string]any{"publicKey": a.notifications.publicKey, "clans": clans})
 }
 
 // Browsers include expirationTime (usually null) in PushSubscription.toJSON().
@@ -175,7 +179,7 @@ func (a *app) subscribePush(w http.ResponseWriter, r *http.Request) {
 		securityError(w, 400, "Ative as notificações pelo navegador.")
 		return
 	}
-	if input.ClanID != "1" && input.ClanID != "2" {
+	if _, valid := findCommunityClan(input.ClanID); !valid {
 		input.ClanID = "all"
 	}
 	id := fmt.Sprintf("%x", sha256.Sum256([]byte(s.Endpoint)))
@@ -254,13 +258,16 @@ func (a *app) announcementList(ctx context.Context, clanID string) ([]announceme
 
 func (a *app) publicAnnouncements(w http.ResponseWriter, r *http.Request) {
 	clanID := r.URL.Query().Get("clan")
-	if clanID != "" && clanID != "all" && clanID != "1" && clanID != "2" {
+	clans := make([]string, 0, len(communityClans))
+	if clanID == "" || clanID == "all" {
+		for _, clan := range communityClans {
+			clans = append(clans, clan.ID)
+		}
+	} else if _, valid := findCommunityClan(clanID); valid {
+		clans = append(clans, clanID)
+	} else {
 		securityError(w, 400, "Filtro de avisos inválido.")
 		return
-	}
-	clans := []string{clanID}
-	if clanID == "" || clanID == "all" {
-		clans = []string{"1", "2"}
 	}
 	items := []announcement{}
 	for _, clan := range clans {
@@ -288,7 +295,7 @@ func (a *app) publicAnnouncements(w http.ResponseWriter, r *http.Request) {
 
 func (a *app) announcementStatus(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query().Get("clan")
-	if id != "1" && id != "2" {
+	if _, valid := findCommunityClan(id); !valid {
 		securityError(w, 400, "Escolha o clã.")
 		return
 	}
@@ -364,7 +371,7 @@ func (a *app) sendAnnouncement(w http.ResponseWriter, r *http.Request) {
 	if !decodeAdminJSON(w, r, &input) {
 		return
 	}
-	if input.ClanID != "1" && input.ClanID != "2" {
+	if _, valid := findCommunityClan(input.ClanID); !valid {
 		securityError(w, 400, "Escolha o clã.")
 		return
 	}

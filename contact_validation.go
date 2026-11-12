@@ -66,8 +66,8 @@ func validateContact(c *contact) error {
 				return fmt.Errorf("O nome da conta contém caracteres inválidos.")
 			}
 		}
-		if account.ClanID != "" && account.ClanID != "1" && account.ClanID != "2" {
-			return fmt.Errorf("Escolha o clã 1, o clã 2 ou clã não informado para cada conta.")
+		if _, valid := findCommunityClan(account.ClanID); account.ClanID != "" && !valid {
+			return fmt.Errorf("Escolha um clã válido ou clã não informado para cada conta.")
 		}
 	}
 	c.PlayerTag = c.Accounts[0].PlayerTag

@@ -24,7 +24,7 @@ func (c *communityPushClient) Do(r *http.Request) (*http.Response, error) {
 	return &http.Response{StatusCode: 201, Body: io.NopCloser(strings.NewReader(""))}, nil
 }
 
-func TestBothClansReachEveryDeviceIncludingLegacyEnrollments(t *testing.T) {
+func TestAllClansReachEveryDeviceIncludingLegacyEnrollments(t *testing.T) {
 	for _, postgres := range []bool{false, true} {
 		t.Run(fmt.Sprint("postgres=", postgres), func(t *testing.T) {
 			a := &app{db: integrationDatabase(t, postgres)}
@@ -47,7 +47,7 @@ func TestBothClansReachEveryDeviceIncludingLegacyEnrollments(t *testing.T) {
 			if pushCount(t, a, `SELECT COUNT(*) FROM push_subscriptions`) != 3 || pushCount(t, a, `SELECT COUNT(*) FROM push_subscriptions WHERE clan_id='all'`) != 1 {
 				t.Fatal("enrollment required a clan or duplicated a device")
 			}
-			for _, clan := range []string{"1", "2"} {
+			for _, clan := range []string{"1", "2", "3"} {
 				res := adminTestRequest(http.HandlerFunc(a.sendAnnouncement), "POST", "https://dashboard.imperiobarbaro.com.br/api/announcements", map[string]string{"clanId": clan, "kind": "raids"}, true)
 				if res.Code != 202 {
 					t.Fatalf("publish %s: %d %s", clan, res.Code, res.Body.String())
@@ -71,14 +71,17 @@ func TestBothClansReachEveryDeviceIncludingLegacyEnrollments(t *testing.T) {
 			a.notifications.client = client
 			a.dispatchPush(context.Background())
 			for _, device := range []string{mainDevice.Endpoint, academyDevice.Endpoint, communityDevice.Endpoint} {
-				if client.calls[device] != 2 {
-					t.Fatalf("device received %d of two clan notices", client.calls[device])
+				if client.calls[device] != 3 {
+					t.Fatalf("device received %d of three clan notices", client.calls[device])
 				}
 			}
-			if pushCount(t, a, `SELECT COUNT(*) FROM push_jobs WHERE state='accepted'`) != 6 {
+			if pushCount(t, a, `SELECT COUNT(*) FROM push_jobs WHERE state='accepted'`) != 9 {
 				t.Fatal("cross-clan jobs were dropped")
 			}
 			if _, err = a.db.Exec(`UPDATE announcements SET created_at=? WHERE clan_id='1'`, time.Now().Unix()-60); err != nil {
+				t.Fatal(err)
+			}
+			if _, err = a.db.Exec(`UPDATE announcements SET created_at=? WHERE clan_id='2'`, time.Now().Unix()-30); err != nil {
 				t.Fatal(err)
 			}
 			feed := adminTestRequest(h, "GET", "https://imperiobarbaro.com.br/api/push/announcements", nil, false)
@@ -88,10 +91,10 @@ func TestBothClansReachEveryDeviceIncludingLegacyEnrollments(t *testing.T) {
 					ClanName string `json:"clanName"`
 				} `json:"items"`
 			}
-			if feed.Code != 200 || json.Unmarshal(feed.Body.Bytes(), &result) != nil || len(result.Items) != 2 {
+			if feed.Code != 200 || json.Unmarshal(feed.Body.Bytes(), &result) != nil || len(result.Items) != 3 {
 				t.Fatalf("combined feed missing notices: %d %s", feed.Code, feed.Body.String())
 			}
-			if result.Items[0].ClanID != "2" || result.Items[1].ClanID != "1" {
+			if result.Items[0].ClanID != "3" || result.Items[1].ClanID != "2" || result.Items[2].ClanID != "1" {
 				t.Fatal("combined feed is not chronological")
 			}
 			for _, item := range result.Items {
@@ -109,7 +112,7 @@ func TestBothClansReachEveryDeviceIncludingLegacyEnrollments(t *testing.T) {
 }
 
 func TestAnnouncementPayloadAlwaysNamesItsClan(t *testing.T) {
-	for _, clan := range []string{"1", "2"} {
+	for _, clan := range []string{"1", "2", "3"} {
 		for _, kind := range []string{"raids", "war-zero", "war-second", "games", "cwl", "custom"} {
 			item := announcement{ID: "notice", ClanID: clan, Kind: kind, Title: "Aviso", Body: "Use seus ataques."}
 			payload := announcementPushPayload(item)

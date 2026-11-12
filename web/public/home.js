@@ -36,6 +36,8 @@ document.getElementById('share-dismiss').addEventListener('click', () => { copyS
 
 const status = document.getElementById('leadership-status')
 const retry = document.getElementById('leadership-retry')
+const teams = [...document.querySelectorAll('[data-team-clan]')]
+const clanIDs = new Set(teams.map(team => team.dataset.teamClan))
 function element(tag, className, text) {
   const node = document.createElement(tag)
   if (className) node.className = className
@@ -49,8 +51,8 @@ async function loadLeadership() {
     const response = await fetch('/public/leadership', {credentials:'omit', cache:'no-store', signal:AbortSignal.timeout(10000)})
     if (!response.ok) throw new Error('unavailable')
     const data = await response.json()
-    if (!Array.isArray(data.items) || !data.items.every(item => ['1','2'].includes(item.clanId) && ['role','name','description'].every(key => typeof item[key] === 'string'))) throw new Error('invalid data')
-    document.querySelectorAll('[data-team-clan]').forEach(container => {
+    if (!Array.isArray(data.items) || !data.items.every(item => clanIDs.has(item.clanId) && ['role','name','description'].every(key => typeof item[key] === 'string'))) throw new Error('invalid data')
+    teams.forEach(container => {
       const entries = data.items.filter(item => item.clanId === container.dataset.teamClan)
       const nodes = entries.map(item => {
         const article = element('article', 'team-person')
@@ -67,7 +69,7 @@ async function loadLeadership() {
     })
     status.textContent = ''
   } catch {
-    document.querySelectorAll('[data-team-clan]').forEach(container => container.replaceChildren())
+    teams.forEach(container => container.replaceChildren())
     status.textContent = 'Não foi possível carregar a liderança atual. Tente novamente em instantes.'
     retry.hidden = false
   }

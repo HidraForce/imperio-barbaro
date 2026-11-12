@@ -8,16 +8,20 @@ import (
 	"strings"
 )
 
+const sqliteContactAccountColumns = `(
+ player_tag TEXT PRIMARY KEY COLLATE NOCASE, contact_id INTEGER NOT NULL,
+ player_name TEXT NOT NULL, clan_id TEXT NOT NULL DEFAULT '' CHECK (clan_id IN ('','1','2','3')),
+ FOREIGN KEY(contact_id) REFERENCES contact_people(id) ON DELETE CASCADE
+)`
+
+const contactClanMigration = "clan-3-accounts"
+
 const contactsSchema = `
 CREATE TABLE IF NOT EXISTS contact_people (
  id INTEGER PRIMARY KEY AUTOINCREMENT, real_name TEXT NOT NULL,
  phone TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT ''
 );
-CREATE TABLE IF NOT EXISTS contact_accounts (
- player_tag TEXT PRIMARY KEY COLLATE NOCASE, contact_id INTEGER NOT NULL,
- player_name TEXT NOT NULL, clan_id TEXT NOT NULL DEFAULT '' CHECK (clan_id IN ('','1','2')),
- FOREIGN KEY(contact_id) REFERENCES contact_people(id) ON DELETE CASCADE
-);
+CREATE TABLE IF NOT EXISTS contact_accounts ` + sqliteContactAccountColumns + `;
 CREATE INDEX IF NOT EXISTS contact_accounts_person ON contact_accounts(contact_id);
 CREATE TABLE IF NOT EXISTS contact_migrations (name TEXT PRIMARY KEY);
 CREATE TABLE IF NOT EXISTS contacts (
@@ -63,7 +67,33 @@ func initContacts(db *database) error {
 	if _, err = tx.Exec(`DROP TABLE contacts`); err != nil {
 		return err
 	}
+	if err = migrateContactClans(tx, []string{
+		`CREATE TABLE contact_accounts_new ` + sqliteContactAccountColumns,
+		`INSERT INTO contact_accounts_new (player_tag,contact_id,player_name,clan_id) SELECT player_tag,contact_id,player_name,clan_id FROM contact_accounts`,
+		`DROP TABLE contact_accounts`,
+		`ALTER TABLE contact_accounts_new RENAME TO contact_accounts`,
+		`CREATE INDEX contact_accounts_person ON contact_accounts(contact_id)`,
+	}); err != nil {
+		return err
+	}
 	return tx.Commit()
+}
+
+func migrateContactClans(tx *databaseTx, statements []string) error {
+	result, err := tx.Exec(`INSERT INTO contact_migrations(name) VALUES (?) ON CONFLICT(name) DO NOTHING`, contactClanMigration)
+	if err != nil {
+		return err
+	}
+	changed, err := result.RowsAffected()
+	if err != nil || changed == 0 {
+		return err
+	}
+	for _, statement := range statements {
+		if _, err = tx.Exec(statement); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func listContacts(ctx context.Context, db *database) ([]contact, error) {

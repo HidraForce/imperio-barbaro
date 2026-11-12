@@ -72,7 +72,7 @@ func validAdminText(value string, limit int, required bool) bool {
 
 func validateRules(d *rulesDocument) error {
 	bad := func() error { return fmt.Errorf("Preencha títulos, resumos e regras dentro dos limites indicados.") }
-	if d.Revision < 1 || d.Revision == math.MaxInt64 || len(d.Clans) != 2 {
+	if d.Revision < 1 || d.Revision == math.MaxInt64 || len(d.Clans) != len(communityClans) {
 		return bad()
 	}
 	if !validAdminText(d.General.Title, 150, true) || !validAdminText(d.General.Penalty, 300, false) {
@@ -95,8 +95,8 @@ func validateRules(d *rulesDocument) error {
 	seen := map[string]bool{}
 	for i := range d.Clans {
 		c := &d.Clans[i]
-		anchor := []string{"regras-principal", "regras-secundario"}[i]
-		if c.ID != fmt.Sprint(i+1) || c.Anchor != anchor || !validAdminText(c.Name, 100, true) || !validAdminText(c.WarSummary, 200, true) || !validAdminText(c.InactivitySummary, 200, true) || len(c.Topics) < 1 || len(c.Topics) > 20 {
+		clan := communityClans[i]
+		if c.ID != clan.ID || c.Anchor != clan.RulesAnchor || !validAdminText(c.Name, 100, true) || !validAdminText(c.WarSummary, 200, true) || !validAdminText(c.InactivitySummary, 200, true) || len(c.Topics) < 1 || len(c.Topics) > 20 {
 			return bad()
 		}
 		c.DocumentURL = strings.TrimSpace(c.DocumentURL)
@@ -107,7 +107,7 @@ func validateRules(d *rulesDocument) error {
 			}
 		}
 		for _, t := range c.Topics {
-			if !leadershipIDPattern.MatchString(t.ID) || !strings.HasPrefix(t.ID, anchor+"-") || seen[t.ID] || !validAdminText(t.Title, 150, true) || !checkItems(t.Items) {
+			if !leadershipIDPattern.MatchString(t.ID) || !strings.HasPrefix(t.ID, clan.RulesAnchor+"-") || seen[t.ID] || !validAdminText(t.Title, 150, true) || !checkItems(t.Items) {
 				return bad()
 			}
 			seen[t.ID] = true
@@ -139,6 +139,33 @@ func initRules(db *database) error {
 	}
 	if _, err = tx.Exec(`INSERT INTO public_rules(id,revision,payload) VALUES(1,1,?) ON CONFLICT(id) DO NOTHING`, string(rulesDefaults)); err != nil {
 		return err
+	}
+	query := `SELECT revision,payload FROM public_rules WHERE id=1`
+	if db.postgres {
+		query += " FOR UPDATE"
+	}
+	var revision int64
+	var payload string
+	if err = tx.QueryRow(query).Scan(&revision, &payload); err != nil {
+		return err
+	}
+	var published rulesDocument
+	if err = json.Unmarshal([]byte(payload), &published); err != nil {
+		return err
+	}
+	if len(published.Clans) == 2 {
+		published.Revision = revision + 1
+		published.Clans = append(published.Clans, defaults.Clans[2])
+		if err = validateRules(&published); err != nil {
+			return err
+		}
+		migrated, err := json.Marshal(published)
+		if err != nil {
+			return err
+		}
+		if _, err = tx.Exec(`UPDATE public_rules SET revision=?,payload=? WHERE id=1`, published.Revision, string(migrated)); err != nil {
+			return err
+		}
 	}
 	return tx.Commit()
 }
@@ -207,7 +234,13 @@ func (a *app) renderHome(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Página indisponível.", 500)
 		return
 	}
-	tmpl, err := template.New("home").Funcs(template.FuncMap{"ruleNumber": func(i int) int { return i + 1 }}).Parse(string(source) + rulesTemplate)
+	tmpl, err := template.New("home").Funcs(template.FuncMap{
+		"ruleNumber": func(i int) int { return i + 1 },
+		"clanProfile": func(id string) communityClan {
+			clan, _ := findCommunityClan(id)
+			return clan
+		},
+	}).Parse(string(source) + rulesTemplate)
 	if err != nil {
 		http.Error(w, "Página indisponível.", 500)
 		return

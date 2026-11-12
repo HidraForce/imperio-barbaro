@@ -88,8 +88,8 @@ func validateLeadership(document *leadershipDocument) error {
 			return fmt.Errorf("Cada função deve ter um identificador único de até 64 letras, números, hífens ou sublinhados.")
 		}
 		seen[item.ID] = true
-		if item.ClanID != "1" && item.ClanID != "2" {
-			return fmt.Errorf("Escolha o clã principal ou secundário para cada função.")
+		if _, valid := findCommunityClan(item.ClanID); !valid {
+			return fmt.Errorf("Escolha um clã válido para cada função.")
 		}
 		if item.Role == "" || utf8.RuneCountInString(item.Role) > 100 || utf8.RuneCountInString(item.Name) > 100 || item.Description == "" || utf8.RuneCountInString(item.Description) > 600 {
 			return fmt.Errorf("Informe a função (até 100 caracteres) e a descrição (até 600). O nome é opcional e aceita até 100 caracteres.")

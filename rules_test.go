@@ -69,6 +69,8 @@ func TestRulesPublishPersistAndEscape(t *testing.T) {
 	doc.General.Title = `<script>alert("x")</script>`
 	doc.Clans[0].WarSummary = "Nova orientação de guerra"
 	doc.Clans[0].DocumentURL = "https://example.com/new-rules.pdf?version=2"
+	doc.Clans[2].Name = "Novo nome do clã 3"
+	doc.Clans[2].WarSummary = "Orientação de guerra do clã 3"
 	saved := adminTestRequest(handler, "PUT", "https://dashboard.imperiobarbaro.com.br/api/rules", doc, true)
 	if saved.Code != 200 {
 		t.Fatal(saved.Code, saved.Body.String())
@@ -85,7 +87,11 @@ func TestRulesPublishPersistAndEscape(t *testing.T) {
 		t.Fatal(home.Code, home.Body.String())
 	}
 	page := home.Body.String()
-	for _, want := range []string{"&lt;script&gt;", "Nova orientação de guerra", "https://example.com/new-rules.pdf?version=2", `id="regras-principal-respeito"`} {
+	for _, want := range []string{
+		"&lt;script&gt;", "Nova orientação de guerra", "https://example.com/new-rules.pdf?version=2", `id="regras-principal-respeito"`,
+		"Novo nome do clã 3", "Orientação de guerra do clã 3", `id="regras-cla-3"`, `data-team-clan="3"`,
+		"https://link.clashofclans.com/pt?action=OpenClanProfile&amp;tag=2CJR2VL8R",
+	} {
 		if !strings.Contains(page, want) {
 			t.Errorf("missing %q", want)
 		}

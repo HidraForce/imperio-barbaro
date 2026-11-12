@@ -1,6 +1,6 @@
 # Império Bárbaro CRM
 
-Site da comunidade e painel privado para os líderes dos dois clãs. Go serve a API e a interface Vue no mesmo contêiner; a produção usa Oracle Cloud, Caddy com HTTPS e SQLite em volume Docker.
+Site da comunidade e painel privado para os líderes dos clãs. Go serve a API e a interface Vue no mesmo contêiner. A produção usa Oracle Cloud, Caddy com HTTPS e SQLite em volume Docker.
 
 - Site público: https://imperiobarbaro.com.br
 - Painel: https://dashboard.imperiobarbaro.com.br
@@ -18,7 +18,7 @@ Preencha `.env` antes de iniciar e abra http://localhost:2025.
 | Variável | Uso |
 | --- | --- |
 | `CLASH_API_TOKEN` | Token criado em https://developer.clashofclans.com com o IP público do servidor autorizado |
-| `CLAN_TAG1`, `CLAN_TAG2` | Tags dos dois clãs; um campo vazio desativa aquele clã |
+| `CLAN_TAG1`, `CLAN_TAG2`, `CLAN_TAG3` | Tags dos clãs. Sem `CLAN_TAG3`, o padrão é `2CJR2VL8R`. Um valor vazio desativa as consultas à API para aquele clã. |
 | `APP_USERNAME`, `APP_PASSWORD` | Login compartilhado dos líderes; senha privada com pelo menos 16 caracteres |
 | `CONTACTS_PASSWORD` | Senha dos contatos, diferente da principal e com pelo menos 16 caracteres |
 | `NOTIFICATIONS_PASSWORD` | Senha exclusiva dos avisos personalizados, mínimo 16 caracteres e diferente de APP_PASSWORD. Sem ela, os avisos personalizados ficam bloqueados |
@@ -35,7 +35,7 @@ O token e as senhas ficam no servidor. Não comite arquivos de ambiente, bancos 
 - Guerra atual, rodadas da CWL e visão de toda a temporada, com exportação CSV.
 - Histórico de até 52 fins de semana de raids e relatórios em texto e CSV. A lista de membros é capturada na primeira sincronização; fins de semana antigos podem não refletir a composição histórica do clã.
 - Mensagens coletivas ou individuais para copiar no WhatsApp, incluindo filtros de zero e um ataque na guerra. O aplicativo não envia mensagens automaticamente.
-- Contatos por pessoa, com até 20 contas nos dois clãs e links para WhatsApp. A área exige a segunda senha, bloqueia ao sair ou ocultar a aba e expira em dez minutos.
+- Contatos por pessoa, com até 20 contas nos clãs da comunidade e links para WhatsApp. A área exige a segunda senha, bloqueia ao sair ou ocultar a aba e expira em dez minutos.
 - Liderança editável no painel, publicada no site com cargos, responsáveis e vagas.
 - Regras públicas editáveis, com links externos opcionais para regulamentos e links por tópico, como `https://imperiobarbaro.com.br/#regras-principal-guerras`.
 - Interface em português, responsiva e instalável como PWA.
@@ -44,9 +44,9 @@ O site público não contém links para o painel. O painel continua com a autent
 
 ## App dos membros e comunicados
 
-Compartilhe `https://imperiobarbaro.com.br/instalar` com novos membros. O app abre em `/app`, recebe notificações Web Push e mostra os últimos 10 comunicados do clã escolhido. A página pública também oferece o link de instalação. O painel mantém sua autenticação e tem a seção **Comunicados**.
+Compartilhe `https://imperiobarbaro.com.br/instalar` com novos membros. O app abre em `/app`, recebe notificações Web Push e mostra os últimos 10 comunicados de cada clã. A página pública também oferece o link de instalação. O painel mantém sua autenticação e tem a seção **Comunicados**.
 
-- Cinco mensagens prontas: guerra com zero ataques, segundo ataque da guerra, raids, jogos do clã e CWL (um ataque por rodada). Cada celular recebe os avisos dos dois clãs com uma única ativação, inclusive se já estava inscrito em apenas um. Não é necessário escolher clã ou vincular contas do jogo. O título e o texto identificam Império Bárbaro · Principal ou Império Bárbar2 · Academia; o texto de guerra indica a quem se aplica.
+- As cinco mensagens prontas cobrem guerra com zero ataques, segundo ataque da guerra, raids, jogos do clã e CWL (um ataque por rodada). Cada celular recebe os avisos de todos os clãs com uma única ativação, inclusive se já estava inscrito em apenas um. O título e o texto identificam o clã. O texto de guerra indica a quem se aplica.
 - Os dois botões de guerra exigem uma guerra normal em andamento com dois ataques por membro. O segundo exige 12 horas completas desde o início, conferidas no servidor. Os outros lembretes são enviados por decisão da liderança.
 - Cada botão, incluindo o personalizado, tem intervalo de uma hora por clã, aplicado no banco e compartilhado entre líderes, abas e reinícios. Sem inscritos, o envio não consome o intervalo.
 - O histórico mantém os 10 comunicados mais recentes por clã. Ao publicar, ao iniciar o servidor e a cada rodada da fila, avisos excedentes e seus registros de entrega são apagados do banco. Envios pendentes ou em processamento são preservados até terminar ou expirar. As inscrições, chaves VAPID e intervalos de envio continuam preservados; apagar o histórico não libera um novo envio antes de uma hora. Essa limpeza não remove notificações já exibidas nos celulares nem apaga cópias dos backups.

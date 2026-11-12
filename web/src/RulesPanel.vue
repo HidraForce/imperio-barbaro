@@ -4,6 +4,7 @@ import { adminAPI } from './admin-api.js'
 import RuleLines from './RuleLines.vue'
 import WhatsAppMessage from './WhatsAppMessage.vue'
 import { rulesMessage } from './rules-message.js'
+const props = defineProps({ clans: { type: Array, default: () => [] } })
 const draft = ref(null), saved = ref(''), busy = ref(false), error = ref(''), feedback = ref(''), conflict = ref(false), confirmReload = ref(false)
 const messageClan=ref('all'),previousPublication=ref(null)
 const published=computed(()=>saved.value?JSON.parse(saved.value):null)
@@ -46,7 +47,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeLeaving))
     <button v-if="!draft && !busy" class="secondary" @click="load">Tentar novamente</button>
     <WhatsAppMessage v-if="published" title="Compartilhar regras e atualizações" :message="whatsappMessage" :busy="busy">
       <p class="report-note">Depois de publicar, a mensagem destaca as alterações desta publicação. Ao abrir ou recarregar, ela mostra um resumo das regras vigentes com os links públicos. {{ dirty?'Há alterações não salvas; o texto abaixo usa a última versão publicada.':'' }}</p>
-      <label class="message-recipient">Regras para compartilhar<select v-model="messageClan"><option value="all">Comunidade e dois clãs</option><option value="general">Somente regras gerais</option><option v-for="clan in published.clans" :key="clan.id" :value="clan.id">{{ clan.name }} e regras gerais</option></select></label>
+      <label class="message-recipient">Regras para compartilhar<select v-model="messageClan"><option value="all">Comunidade e todos os clãs</option><option value="general">Somente regras gerais</option><option v-for="clan in published.clans" :key="clan.id" :value="clan.id">{{ clan.name }} e regras gerais</option></select></label>
     </WhatsAppMessage>
     <form v-if="draft" @submit.prevent="save">
       <div class="editor-actions rules-publish-bar"><button class="primary" :disabled="busy || !dirty || conflict">{{ busy ? 'Salvando…' : 'Salvar e publicar regras' }}</button><button type="button" class="secondary" :disabled="busy" @click="reload">Recarregar regras salvas</button></div>
@@ -58,7 +59,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeLeaving))
         <RuleLines v-model="draft.general.items" label="Regra geral"/>
       </fieldset>
       <fieldset v-for="clan in draft.clans" :key="clan.id" :disabled="busy">
-        <legend>{{ clan.id === '1' ? 'Clã principal' : 'Clã secundário' }}</legend>
+        <legend>{{ props.clans.find(profile => profile.id === clan.id)?.label || clan.name }}</legend>
         <label>Nome do clã<input v-model="clan.name" maxlength="100" required></label>
         <div class="editor-grid">
           <label>Resumo das guerras<input v-model="clan.warSummary" maxlength="200" required></label>

@@ -1,15 +1,11 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 
-const clans = [
-  { id: '1', name: 'Império Bárbaro', label: 'Clã principal' },
-  { id: '2', name: 'Império Bárbar2', label: 'Clã secundário' },
-]
-const ruleLinks = [
+const props = defineProps({ clans: { type: Array, required: true } })
+const ruleLinks = computed(() => [
   { name: 'Regras do grupo geral', url: 'https://imperiobarbaro.com.br/#regras-gerais' },
-  { name: 'Regras do clã principal', url: 'https://imperiobarbaro.com.br/#regras-principal' },
-  { name: 'Regras do clã secundário', url: 'https://imperiobarbaro.com.br/#regras-secundario' },
-]
+  ...props.clans.map(clan => ({ name: 'Regras · ' + clan.label, url: 'https://imperiobarbaro.com.br/#' + clan.rulesAnchor })),
+])
 const items = ref([])
 const revision = ref(null)
 const snapshot = ref('[]')
@@ -32,7 +28,7 @@ function parseDocument(value) {
   }
   const ids = new Set()
   for (const item of value.items) {
-    if (!item || typeof item.id !== 'string' || !item.id || ids.has(item.id) || !['1', '2'].includes(item.clanId) ||
+    if (!item || typeof item.id !== 'string' || !item.id || ids.has(item.id) || !props.clans.some(clan => clan.id === item.clanId) ||
       typeof item.role !== 'string' || item.role.length > 100 || typeof item.name !== 'string' || item.name.length > 100 ||
       typeof item.description !== 'string' || item.description.length > 600) {
       throw new Error('Os dados da liderança estão incompletos. Recarregue os dados salvos antes de editar.')
@@ -166,7 +162,7 @@ onBeforeUnmount(() => { requestController?.abort(); window.removeEventListener('
       <div>
         <small>CONTEÚDO DA PÁGINA INICIAL</small>
         <h2 id="leadership-heading">Liderança pública</h2>
-        <p>Atualize os responsáveis, cargos e funções dos dois clãs. As alterações aparecem para todos na página inicial após salvar.</p>
+        <p>Atualize os responsáveis, cargos e funções dos clãs. As alterações aparecem para todos na página inicial após salvar.</p>
       </div>
       <a class="public-preview" href="https://imperiobarbaro.com.br/#lideranca" target="_blank" rel="noopener noreferrer">Ver página pública ↗</a>
     </div>
