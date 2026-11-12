@@ -114,12 +114,15 @@ func TestAllClansReachEveryDeviceIncludingLegacyEnrollments(t *testing.T) {
 }
 
 func TestAnnouncementPayloadAlwaysNamesItsClan(t *testing.T) {
-	for _, clan := range []string{"1", "2", "3"} {
+	for _, clan := range []struct{ id, label string }{
+		{"1", "Império Bárbaro · Principal"},
+		{"2", "Império Bárbar2"},
+		{"3", "Império Bárbaro 3"},
+	} {
 		for _, kind := range []string{"raids", "war-zero", "war-second", "games", "cwl", "custom"} {
-			item := announcement{ID: "notice", ClanID: clan, Kind: kind, Title: "Aviso", Body: "Use seus ataques."}
+			item := announcement{ID: "notice", ClanID: clan.id, Kind: kind, Title: "Aviso", Body: "Use seus ataques."}
 			payload := announcementPushPayload(item)
-			label := announcementClanName(clan)
-			if payload["title"] != label+" · Aviso" || payload["body"] != "Clã: "+label+"\nUse seus ataques." || payload["clanId"] != clan || payload["clanName"] != label || payload["url"] != "/app#notice" {
+			if payload["title"] != clan.label+" · Aviso" || payload["body"] != "Clã: "+clan.label+"\nUse seus ataques." || payload["clanId"] != clan.id || payload["clanName"] != clan.label || payload["url"] != "/app#notice" {
 				t.Fatalf("clan missing in %s payload: %+v", kind, payload)
 			}
 		}

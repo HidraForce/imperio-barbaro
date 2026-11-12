@@ -59,7 +59,7 @@ test('Worker displays closed-app pushes and refreshes only member windows on the
  assert.equal(intercepted,false,'private APIs must not be cached')
 })
 
-const memberClans=[{id:'1',name:'Império Bárbaro · Principal'},{id:'2',name:'Império Bárbar2'},{id:'3',name:'Clã 3 · #2CJR2VL8R'}]
+const memberClans=[{id:'1',name:'Império Bárbaro · Principal'},{id:'2',name:'Império Bárbar2'},{id:'3',name:'Império Bárbaro 3'}]
 
 async function memberHarness({permission='granted',existing=true,saveFailure=false,clanIds,storageThrows=false,device,subscribeFailure=false,page='install',feedItems=[],hash=''}={}){
  device??={permission,existing,enrolled:existing,clanIds,subscribeCalls:0,permissionRequests:0}
@@ -131,7 +131,7 @@ test('First activation immediately completes the installed app setup',async()=>{
 
 test('An open member feed shows selected clans and refreshes when a sender copy arrives',async()=>{
  const items=[
-  {id:'third',clanId:'3',clanName:'Clã 3 · #2CJR2VL8R',title:'Jogos',body:'Faça seus pontos.',createdAt:300},
+  {id:'third',clanId:'3',clanName:'Império Bárbaro 3',title:'Jogos',body:'Faça seus pontos.',createdAt:300},
   {id:'second',clanId:'2',clanName:'Império Bárbar2',title:'CWL',body:'Use seu ataque.',createdAt:200},
   {id:'main',clanId:'1',clanName:'Império Bárbaro · Principal',title:'Raids',body:'Use seus ataques.',createdAt:100},
  ]
@@ -143,7 +143,7 @@ test('An open member feed shows selected clans and refreshes when a sender copy 
  assert.ok(!app.requests.some(item=>item.path.includes('?clan=')))
  const cards=app.elements.get('feed-items').children
  assert.deepEqual(cards.map(card=>card.id),['third','main'])
- assert.deepEqual(cards.map(card=>card.children[1].textContent),['Clã 3 · #2CJR2VL8R','Império Bárbaro · Principal'])
+ assert.deepEqual(cards.map(card=>card.children[1].textContent),['Império Bárbaro 3','Império Bárbaro · Principal'])
  await app.swListeners.message({data:{type:'imperio-announcement',id:'second',clanId:'2'}})
  assert.deepEqual(app.elements.get('feed-items').children.map(card=>card.id),['third','second','main'])
  for(const name of ['install.html','member.html'])assert.match(await readFile(new URL('../public/'+name,import.meta.url),'utf8'),/id="clan-preferences"/)
@@ -231,7 +231,7 @@ test('A device can save multiple clans and restore its selection without browser
 })
 
 test('A sender link opens the published notice even when notification permission is blocked',async()=>{
- const item={id:'just-sent',clanId:'3',clanName:'Clã 3',title:'Novo aviso',body:'Recado',createdAt:300}
+ const item={id:'just-sent',clanId:'3',clanName:'Império Bárbaro 3',title:'Novo aviso',body:'Recado',createdAt:300}
  const app=await memberHarness({page:'member',permission:'denied',existing:false,hash:'#just-sent',feedItems:[item]})
  await app.activate()
  await app.listeners['refresh-feed:click']()

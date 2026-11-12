@@ -23,7 +23,7 @@ var communityClans = [...]communityClan{
 		Description: "Uma academia para aprender ataques, recuperar a vila e crescer junto com a equipe.",
 	},
 	{
-		ID: "3", Name: "Clã 3", Label: "Clã terciário", ProfileTag: "2CJR2VL8R", RulesAnchor: "regras-cla-3",
+		ID: "3", Name: "Império Bárbaro 3", Label: "Clã terciário", ProfileTag: "2CJR2VL8R", RulesAnchor: "regras-cla-3",
 	},
 }
 
