@@ -10,6 +10,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	webpush "github.com/SherClockHolmes/webpush-go"
 )
 
 type communityPushClient struct {
@@ -121,5 +123,69 @@ func TestAnnouncementPayloadAlwaysNamesItsClan(t *testing.T) {
 				t.Fatalf("clan missing in %s payload: %+v", kind, payload)
 			}
 		}
+	}
+}
+
+func TestSelectedClansAndAuthenticatedSenderReceiveOnePushPerDevice(t *testing.T) {
+	a, handler := notificationTestApp(t)
+	const dashboard = "https://dashboard.imperiobarbaro.com.br"
+	const community = "https://imperiobarbaro.com.br"
+	enroll := func(origin string, subscription webpush.Subscription, clans []string, status int) {
+		t.Helper()
+		res := adminTestRequest(handler, "POST", origin+"/api/push/subscription", map[string]any{"subscription": subscription, "clanIds": clans}, origin == dashboard)
+		if res.Code != status {
+			t.Fatalf("enrollment: %d %s", res.Code, res.Body)
+		}
+	}
+	publish := func(clan, kind string, sender webpush.Subscription, status, queued int) string {
+		t.Helper()
+		res := adminTestRequest(handler, "POST", dashboard+"/api/announcements", map[string]any{"clanId": clan, "kind": kind, "senderSubscription": sender}, true)
+		if res.Code != status {
+			t.Fatalf("publish: %d %s", res.Code, res.Body)
+		}
+		if status != 202 {
+			return ""
+		}
+		var result struct {
+			ID     string
+			Queued int
+		}
+		if json.Unmarshal(res.Body.Bytes(), &result) != nil || result.ID == "" || result.Queued != queued {
+			t.Fatalf("unexpected receipt: %s", res.Body)
+		}
+		return result.ID
+	}
+	sender, multiClanMember, secondClanMember := testPushSubscription(t), testPushSubscription(t), testPushSubscription(t)
+	enroll(dashboard, sender, []string{"2"}, 200)
+	forged := sender
+	forged.Keys = testPushSubscription(t).Keys
+	publish("3", "games", forged, 409, 0)
+	publish("3", "games", sender, 202, 1)
+	enroll(community, multiClanMember, []string{"1", "2", "3"}, 200)
+	enroll(community, multiClanMember, []string{"3", "1"}, 200)
+	enroll(community, multiClanMember, []string{"3", "3"}, 400)
+	enroll(community, multiClanMember, []string{"4"}, 400)
+	enroll(community, multiClanMember, []string{}, 400)
+	enroll(community, multiClanMember, nil, 200)
+	restore := adminTestRequest(handler, "POST", community+"/api/push/subscription/restore", map[string]any{"subscription": multiClanMember}, false)
+	if restore.Code != 200 || strings.TrimSpace(restore.Body.String()) != `{"clanId":"all","clanIds":["1","3"]}` {
+		t.Fatalf("unexpected restored preferences: %s", restore.Body)
+	}
+	enroll(community, secondClanMember, []string{"2"}, 200)
+	id := publish("3", "raids", sender, 202, 2)
+	publish("2", "raids", sender, 202, 2)
+	feed := adminTestRequest(handler, "GET", dashboard+"/api/push/announcements?clan=3", nil, true)
+	if feed.Code != 200 || !strings.Contains(feed.Body.String(), id) {
+		t.Fatalf("sent notice missing on the dashboard origin: %s", feed.Body)
+	}
+	client := &communityPushClient{calls: make(map[string]int)}
+	a.notifications.client = client
+	a.dispatchPush(context.Background())
+	if client.calls[sender.Endpoint] != 3 || client.calls[multiClanMember.Endpoint] != 1 || client.calls[secondClanMember.Endpoint] != 1 {
+		t.Fatalf("unexpected delivery counts: sender %d, multi-clan member %d, second-clan member %d",
+			client.calls[sender.Endpoint], client.calls[multiClanMember.Endpoint], client.calls[secondClanMember.Endpoint])
+	}
+	if announcementClanName("2") != "Império Bárbar2" {
+		t.Fatal("unexpected second-clan label")
 	}
 }

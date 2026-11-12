@@ -71,7 +71,7 @@ func (a *app) testPush(w http.ResponseWriter, r *http.Request) {
 		securityError(w, 429, "Aguarde um minuto antes de testar novamente neste celular.")
 		return
 	}
-	status, err := a.sendPushPayload(r.Context(), s, map[string]string{"id": "test-" + randomPushID(), "title": "🔔 Teste · avisos de todos os clãs", "body": "Tudo pronto! Este celular recebe avisos de todos os clãs. Cada comunicado mostra o nome do clã.", "url": "/app"}, 60)
+	status, err := a.sendPushPayload(r.Context(), s, map[string]string{"id": "test-" + randomPushID(), "title": "🔔 Teste de avisos · Império Bárbaro", "body": "Tudo pronto! Este aparelho recebe os avisos dos clãs que você selecionou.", "url": "/app"}, 60)
 	if status == 404 || status == 410 {
 		_, _ = a.db.ExecContext(r.Context(), `DELETE FROM push_subscriptions WHERE id=?`, id)
 		securityError(w, 409, "A inscrição deste celular expirou. Ative os avisos novamente.")

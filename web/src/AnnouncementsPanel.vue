@@ -6,6 +6,7 @@ const props=defineProps({clanId:String,war:Object,warLoading:Boolean})
 const vault=createAnnouncementVault('custom','X-Notifications-Session')
 const timerVault=createAnnouncementVault('timer','X-Super-Notifications-Session')
 const data=ref(null),error=ref(''),feedback=ref(''),busy=ref(false),loading=ref(true),title=ref(''),body=ref(''),now=ref(Date.now()),offset=ref(0)
+const sentNoticeURL=ref('')
 const installURL='https://imperiobarbaro.com.br/instalar'
 let generation=0,timer,poll
 const timestamp=computed(()=>Math.floor((now.value+offset.value)/1000))
@@ -30,16 +31,27 @@ async function load(silent=false){
 async function send(kind){
  if(busy.value||!data.value||remaining(kind)||warBlock(kind))return
  const clan=props.clanId
- busy.value=true;error.value='';feedback.value=''
+ busy.value=true;error.value='';feedback.value='';sentNoticeURL.value=''
  try{
   const input={clanId:clan,kind,...(kind==='custom'?{title:title.value,body:body.value}:{})}
+  const senderSubscription=await currentDeviceSubscription()
+  if(senderSubscription)input.senderSubscription=senderSubscription
   const result=kind==='custom'?await vault.request('/api/announcements/custom',{method:'POST',body:JSON.stringify(input)}):await adminAPI('/api/announcements',{method:'POST',body:JSON.stringify(input)})
   if(clan!==props.clanId)return
   feedback.value=`Aviso na fila para ${result.queued} celular(es). Acompanhe o envio abaixo.`
+  sentNoticeURL.value='/app#'+encodeURIComponent(result.id)
   data.value.cooldowns[kind]=result.nextAt
   if(kind==='custom'){title.value='';body.value=''}
  }catch(e){if(clan===props.clanId){error.value=e.message;if([401,423].includes(e.status)&&kind==='custom')vault.lock(e.message)}}
  finally{busy.value=false;await load(true)}
+}
+async function currentDeviceSubscription(){
+ try{
+  if(window.Notification?.permission!=='granted')return
+  const registration=await navigator.serviceWorker?.getRegistration('/app')
+  const subscription=await registration?.pushManager.getSubscription()
+  return subscription?.toJSON()
+ }catch{}
 }
 function date(n){return new Date(n*1000).toLocaleString('pt-BR')}
 async function copy(){try{await navigator.clipboard.writeText(installURL);feedback.value='Link de instalação copiado.'}catch{feedback.value='Copie o link de instalação exibido acima.'}}
@@ -53,31 +65,31 @@ async function resetTimer(kind){
 }
 function lockAccess(){if(document.hidden){vault.lock();timerVault.lock()}}
 function lockAll(){vault.lock();timerVault.lock()}
-watch(()=>props.clanId,()=>{feedback.value='';load()})
+watch(()=>props.clanId,()=>{feedback.value='';sentNoticeURL.value='';load()})
 onMounted(()=>{document.addEventListener('visibilitychange',lockAccess);window.addEventListener('pagehide',lockAll);load();timer=setInterval(()=>{now.value=Date.now()},1000);poll=setInterval(()=>{if(!document.hidden&&!busy.value)load(true)},15000)})
 onUnmounted(()=>{document.removeEventListener('visibilitychange',lockAccess);window.removeEventListener('pagehide',lockAll);lockAll();generation++;clearInterval(timer);clearInterval(poll)})
 </script>
 <template>
  <section class="announcements-panel">
-  <div class="announcements-intro"><div><small>O IMPÉRIO NO CELULAR</small><h2>Um toque. Um lembrete.</h2><p>Todos os celulares com avisos ativados recebem os comunicados de todos os clãs. O clã selecionado é identificado no título e no texto de cada aviso. Para receber neste celular, abra o app de membros e ative os avisos uma vez.</p></div><div class="install-share"><label>Link para os novos membros<input :value="installURL" readonly aria-label="Link de instalação"></label><button class="secondary" @click="copy">Copiar link</button><a :href="installURL" target="_blank" rel="noopener">Preparar este celular ↗</a></div></div>
+  <div class="announcements-intro"><div><small>O IMPÉRIO NO CELULAR</small><h2>Um toque. Um lembrete.</h2><p>Os membros recebem os avisos dos clãs que selecionaram. Para receber seus próprios envios, ative os avisos neste navegador.</p></div><div class="install-share"><label>Link para os novos membros<input :value="installURL" readonly aria-label="Link de instalação"></label><button class="secondary" @click="copy">Copiar link</button><a href="/app" target="_blank" rel="noopener">Ativar avisos neste navegador ↗</a></div></div>
   <p v-if="loading" role="status">Carregando comunicados…</p>
   <p v-if="error" class="notice error" role="alert">{{ error }} <button :disabled="busy" @click="load()">Atualizar</button></p>
-  <p v-if="feedback" class="notice" role="status">{{ feedback }}</p>
+  <p v-if="feedback" class="notice" role="status">{{ feedback }} <a v-if="sentNoticeURL" :href="sentNoticeURL" target="_blank" rel="noopener">Ver aviso no app ↗</a></p>
   <template v-if="data">
-   <div class="announcement-reach"><strong>{{ data.subscribers }}</strong><span>celular(es) recebendo avisos de todos os clãs</span><span>Intervalo de <b>1 hora por botão</b>, compartilhado entre os líderes.</span></div>
-   <p v-if="!data.subscribers" class="notice">Compartilhe o link de instalação. O envio fica disponível quando houver um celular com avisos ativados.</p>
+   <div class="announcement-reach"><strong>{{ data.subscribers }}</strong><span>celular(es) inscritos neste clã</span><span>Intervalo de <b>1 hora por botão</b>, compartilhado entre os líderes.</span></div>
+   <p v-if="!data.subscribers" class="notice">Nenhum celular inscrito neste clã. Compartilhe o link de instalação ou ative os avisos neste navegador.</p>
    <section class="timer-access custom-announcement"><div class="section"><div><small>ACESSO PROTEGIDO</small><h2>Liberar intervalo</h2><p>Use a senha de liberação para antecipar um botão. Isso não envia um aviso e mantém a regra das 12 horas de guerra.</p></div><button v-if="timerVault.unlocked.value" class="secondary" @click="timerVault.lock()">Bloquear liberação</button></div>
     <p v-if="!data.timerConfigured" class="notice">A senha de liberação do intervalo ainda não foi configurada.</p>
     <form v-else-if="!timerVault.unlocked.value" @submit.prevent="timerVault.unlock"><label>Senha de liberação do intervalo<input v-model="timerVault.password.value" type="password" autocomplete="off" required :disabled="timerVault.busy.value"></label><button class="secondary" :disabled="timerVault.busy.value">{{ timerVault.busy.value?'Desbloqueando…':'Desbloquear liberação' }}</button></form>
     <p v-else class="notice">Liberação disponível por dez minutos. Use “Liberar agora” no botão desejado. Ao ocultar o painel, este acesso bloqueia.</p><p v-if="timerVault.error.value" role="alert">{{ timerVault.error.value }}</p>
    </section>
-   <div class="announcement-grid"><article v-for="item in data.templates" :key="item.kind" class="announcement-card"><small>{{ data.clanName }} · {{ item.label }}</small><h3>{{ item.title }}</h3><p>{{ item.body }}</p><button class="primary" :disabled="busy||!data.subscribers||remaining(item.kind)>0||!!warBlock(item.kind)" @click="send(item.kind)">{{ remaining(item.kind)?waitLabel(item.kind):warBlock(item.kind)||'Enviar aviso' }}</button><button v-if="remaining(item.kind)>0&&timerVault.unlocked.value" class="secondary" :disabled="busy" @click="resetTimer(item.kind)">Liberar agora</button></article></div>
+   <div class="announcement-grid"><article v-for="item in data.templates" :key="item.kind" class="announcement-card"><small>{{ data.clanName }} · {{ item.label }}</small><h3>{{ item.title }}</h3><p>{{ item.body }}</p><button class="primary" :disabled="busy||remaining(item.kind)>0||!!warBlock(item.kind)" @click="send(item.kind)">{{ remaining(item.kind)?waitLabel(item.kind):warBlock(item.kind)||'Enviar aviso' }}</button><button v-if="remaining(item.kind)>0&&timerVault.unlocked.value" class="secondary" :disabled="busy" @click="resetTimer(item.kind)">Liberar agora</button></article></div>
    <section class="custom-announcement"><div class="section"><div><small>ACESSO PROTEGIDO</small><h2>Aviso personalizado</h2><p>Use a senha exclusiva de avisos personalizados. A sessão bloqueia ao ocultar o painel e expira em dez minutos.</p></div><button v-if="vault.unlocked.value" class="secondary" @click="vault.lock()">Bloquear</button></div>
     <p v-if="!data.customConfigured" class="notice">A senha de avisos personalizados ainda não foi configurada.</p>
     <form v-else-if="!vault.unlocked.value" @submit.prevent="vault.unlock"><label>Senha de avisos personalizados<input v-model="vault.password.value" type="password" autocomplete="off" required :disabled="vault.busy.value"></label><button class="primary" :disabled="vault.busy.value">{{ vault.busy.value?'Desbloqueando…':'Desbloquear' }}</button><p v-if="vault.error.value" role="alert">{{ vault.error.value }}</p></form>
-    <form v-else @submit.prevent="send('custom')"><label>Título<input v-model="title" maxlength="70" required placeholder="Ex.: Reunião da liderança"></label><label>Mensagem curta<textarea v-model="body" maxlength="240" required rows="3" placeholder="Escreva o que o membro precisa saber ou fazer."></textarea><small>{{ body.length }}/240</small></label><div v-if="title||body" class="announcement-preview"><small>PRÉVIA NO CELULAR · {{ data.clanName }}</small><strong>{{ title||'Título do aviso' }}</strong><p>Clã: {{ data.clanName }}<br>{{ body||'Mensagem do aviso' }}</p></div><button class="primary" :disabled="busy||!data.subscribers||remaining('custom')>0||!title.trim()||!body.trim()">{{ waitLabel('custom') }}</button><button v-if="remaining('custom')>0&&timerVault.unlocked.value" type="button" class="secondary" :disabled="busy" @click="resetTimer('custom')">Liberar agora</button></form>
+    <form v-else @submit.prevent="send('custom')"><label>Título<input v-model="title" maxlength="70" required placeholder="Ex.: Reunião da liderança"></label><label>Mensagem curta<textarea v-model="body" maxlength="240" required rows="3" placeholder="Escreva o que o membro precisa saber ou fazer."></textarea><small>{{ body.length }}/240</small></label><div v-if="title||body" class="announcement-preview"><small>PRÉVIA NO CELULAR · {{ data.clanName }}</small><strong>{{ title||'Título do aviso' }}</strong><p>Clã: {{ data.clanName }}<br>{{ body||'Mensagem do aviso' }}</p></div><button class="primary" :disabled="busy||remaining('custom')>0||!title.trim()||!body.trim()">{{ waitLabel('custom') }}</button><button v-if="remaining('custom')>0&&timerVault.unlocked.value" type="button" class="secondary" :disabled="busy" @click="resetTimer('custom')">Liberar agora</button></form>
    </section>
-   <section class="announcement-history"><div class="section"><h2>Últimos 10 comunicados</h2><button class="secondary" :disabled="busy" @click="load(true)">Atualizar envios</button></div><p class="report-note">Aceito pelo serviço de push não confirma leitura. Som, destaque e entrega dependem das configurações do celular. Avisos pendentes expiram em uma hora. Os 10 comunicados mais recentes ficam no histórico; os anteriores são apagados após concluir os envios.</p><p v-if="!data.items.length">Nenhum comunicado enviado neste clã.</p><article v-for="item in data.items" :key="item.id"><small>{{ date(item.createdAt) }}</small><h3>{{ item.title }}</h3><p>{{ item.body }}</p><p class="report-note">{{ item.accepted }} aceito(s) pelo serviço · {{ item.pending }} na fila · {{ item.failed }} sem entrega · {{ item.recipients }} destinatário(s)</p></article></section>
+   <section class="announcement-history"><div class="section"><h2>Últimos 10 comunicados</h2><button class="secondary" :disabled="busy" @click="load(true)">Atualizar envios</button></div><p class="report-note">Aceito pelo serviço de push não confirma leitura. Som, destaque e entrega dependem das configurações do celular. Avisos pendentes expiram em uma hora. Os 10 comunicados mais recentes ficam no histórico; os anteriores são apagados após concluir os envios.</p><p v-if="!data.items.length">Nenhum comunicado enviado neste clã.</p><article v-for="item in data.items" :key="item.id"><small>{{ date(item.createdAt) }}</small><h3>{{ item.title }}</h3><p>{{ item.body }}</p><p class="report-note">{{ item.accepted }} aceito(s) pelo serviço · {{ item.pending }} na fila · {{ item.failed }} sem entrega · {{ item.recipients }} destinatário(s)</p><a :href="'/app#'+encodeURIComponent(item.id)" target="_blank" rel="noopener">Ver aviso no app ↗</a></article></section>
   </template>
  </section>
 </template>

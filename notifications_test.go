@@ -133,7 +133,7 @@ func TestRestorePushClanRequiresCompleteDeviceSubscription(t *testing.T) {
 		return adminTestRequest(h, "POST", "https://imperiobarbaro.com.br/api/push/subscription/restore", map[string]any{"subscription": subscription}, false)
 	}
 	res := restore(s)
-	if res.Code != 200 || strings.TrimSpace(res.Body.String()) != `{"clanId":"2"}` {
+	if res.Code != 200 || strings.TrimSpace(res.Body.String()) != `{"clanId":"2","clanIds":["1","2","3"]}` {
 		t.Fatalf("device clan not restored: %d %s", res.Code, res.Body.String())
 	}
 	for _, bad := range []webpush.Subscription{
@@ -142,7 +142,7 @@ func TestRestorePushClanRequiresCompleteDeviceSubscription(t *testing.T) {
 		testPushSubscription(t),
 	} {
 		res = restore(bad)
-		if res.Code != 200 || strings.TrimSpace(res.Body.String()) != `{"clanId":""}` {
+		if res.Code != 200 || strings.TrimSpace(res.Body.String()) != `{"clanId":"","clanIds":[]}` {
 			t.Fatalf("another subscription revealed clan: %d %s", res.Code, res.Body.String())
 		}
 	}
