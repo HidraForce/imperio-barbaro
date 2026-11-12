@@ -62,9 +62,6 @@ func announcementClanName(clanID string) string {
 		if clan.AnnouncementLabel != "" {
 			return clan.Name + " · " + clan.AnnouncementLabel
 		}
-		if clan.ID == "3" {
-			return clan.Name + " · #" + clan.ProfileTag
-		}
 		return clan.Name
 	}
 	return "Comunidade do Império"
