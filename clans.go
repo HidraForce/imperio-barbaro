@@ -20,8 +20,7 @@ var communityClans = [...]communityClan{
 	},
 	{
 		ID: "2", Name: "Império Bárbar2", Label: "Clã secundário", ProfileTag: "2RJY0VC8C", RulesAnchor: "regras-secundario",
-		Description:       "Uma academia para aprender ataques, recuperar a vila e crescer junto com a equipe.",
-		AnnouncementLabel: "Academia",
+		Description: "Uma academia para aprender ataques, recuperar a vila e crescer junto com a equipe.",
 	},
 	{
 		ID: "3", Name: "Clã 3", Label: "Terceiro clã", ProfileTag: "2CJR2VL8R", RulesAnchor: "regras-cla-3",

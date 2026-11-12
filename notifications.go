@@ -62,7 +62,10 @@ func announcementClanName(clanID string) string {
 		if clan.AnnouncementLabel != "" {
 			return clan.Name + " · " + clan.AnnouncementLabel
 		}
-		return clan.Name + " · #" + clan.ProfileTag
+		if clan.ID == "3" {
+			return clan.Name + " · #" + clan.ProfileTag
+		}
+		return clan.Name
 	}
 	return "Comunidade do Império"
 }
@@ -166,9 +169,24 @@ type browserPushSubscription struct {
 	Keys           webpush.Keys `json:"keys"`
 }
 
+const pushClanMatch = `(clan_id NOT LIKE '%,%' OR clan_id LIKE ?)`
+
+func pushClanPattern(clanID string) string { return "%," + clanID + ",%" }
+
+func pushClanIDs(preference string) []string {
+	ids := []string{}
+	for _, clan := range communityClans {
+		if !strings.Contains(preference, ",") || strings.Contains(preference, ","+clan.ID+",") {
+			ids = append(ids, clan.ID)
+		}
+	}
+	return ids
+}
+
 func (a *app) subscribePush(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		ClanID       string                  `json:"clanId"`
+		ClanIDs      []string                `json:"clanIds"`
 		Subscription browserPushSubscription `json:"subscription"`
 	}
 	if !decodeAdminJSON(w, r, &input) {
@@ -179,18 +197,37 @@ func (a *app) subscribePush(w http.ResponseWriter, r *http.Request) {
 		securityError(w, 400, "Ative as notificações pelo navegador.")
 		return
 	}
-	if _, valid := findCommunityClan(input.ClanID); !valid {
-		input.ClanID = "all"
+	preference := "all"
+	if _, valid := findCommunityClan(input.ClanID); valid {
+		preference = input.ClanID
+	}
+	if input.ClanIDs != nil {
+		if len(input.ClanIDs) == 0 || len(input.ClanIDs) > len(communityClans) {
+			securityError(w, 400, "Selecione pelo menos um clã válido.")
+			return
+		}
+		seen := make(map[string]bool, len(input.ClanIDs))
+		for _, id := range input.ClanIDs {
+			if _, valid := findCommunityClan(id); !valid || seen[id] {
+				securityError(w, 400, "Selecione clãs válidos sem repetir a seleção.")
+				return
+			}
+			seen[id] = true
+		}
+		preference = "," + strings.Join(input.ClanIDs, ",") + ","
 	}
 	id := fmt.Sprintf("%x", sha256.Sum256([]byte(s.Endpoint)))
 	// The id is a capability, never returned in a public list. Deletion requires
 	// the complete subscription rather than a guessable member identifier.
-	_, err := a.db.ExecContext(r.Context(), `INSERT INTO push_subscriptions(id,endpoint,p256dh,auth,clan_id,updated_at) VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET p256dh=excluded.p256dh,auth=excluded.auth,clan_id=excluded.clan_id,updated_at=excluded.updated_at`, id, s.Endpoint, s.Keys.P256dh, s.Keys.Auth, input.ClanID, time.Now().Unix())
+	err := a.db.QueryRowContext(r.Context(), `INSERT INTO push_subscriptions(id,endpoint,p256dh,auth,clan_id,updated_at) VALUES(?,?,?,?,?,?)
+	 ON CONFLICT(id) DO UPDATE SET p256dh=excluded.p256dh,auth=excluded.auth,
+	 clan_id=CASE WHEN excluded.clan_id NOT LIKE '%,%' AND push_subscriptions.clan_id LIKE '%,%' THEN push_subscriptions.clan_id ELSE excluded.clan_id END,
+	 updated_at=excluded.updated_at RETURNING clan_id`, id, s.Endpoint, s.Keys.P256dh, s.Keys.Auth, preference, time.Now().Unix()).Scan(&preference)
 	if err != nil {
 		securityError(w, 500, "Não foi possível ativar os avisos. Tente novamente.")
 		return
 	}
-	jsonResponse(w, 200, map[string]bool{"subscribed": true})
+	jsonResponse(w, 200, map[string]any{"subscribed": true, "clanIds": pushClanIDs(preference)})
 }
 
 func (a *app) unsubscribePush(w http.ResponseWriter, r *http.Request) {
@@ -225,14 +262,21 @@ func (a *app) restorePush(w http.ResponseWriter, r *http.Request) {
 	var clan string
 	err := a.db.QueryRowContext(r.Context(), `SELECT clan_id FROM push_subscriptions WHERE endpoint=? AND p256dh=? AND auth=?`, s.Endpoint, s.Keys.P256dh, s.Keys.Auth).Scan(&clan)
 	if err == sql.ErrNoRows {
-		jsonResponse(w, 200, map[string]string{"clanId": ""})
+		jsonResponse(w, 200, map[string]any{"clanId": "", "clanIds": []string{}})
 		return
 	}
 	if err != nil {
 		securityError(w, 500, "Não foi possível recuperar seu clã. Tente novamente.")
 		return
 	}
-	jsonResponse(w, 200, map[string]string{"clanId": clan})
+	ids := pushClanIDs(clan)
+	if strings.Contains(clan, ",") {
+		clan = "all"
+		if len(ids) == 1 {
+			clan = ids[0]
+		}
+	}
+	jsonResponse(w, 200, map[string]any{"clanId": clan, "clanIds": ids})
 }
 
 func (a *app) announcementList(ctx context.Context, clanID string) ([]announcement, error) {
@@ -325,7 +369,7 @@ func (a *app) announcementStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var subscribers int
-	if err = a.db.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM push_subscriptions`).Scan(&subscribers); err != nil {
+	if err = a.db.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM push_subscriptions WHERE `+pushClanMatch, pushClanPattern(id)).Scan(&subscribers); err != nil {
 		securityError(w, 500, "Não foi possível conferir as inscrições.")
 		return
 	}
@@ -363,10 +407,11 @@ func (a *app) warReminderReady(ctx context.Context, clanID string, second bool, 
 
 func (a *app) sendAnnouncement(w http.ResponseWriter, r *http.Request) {
 	var input struct {
-		ClanID string `json:"clanId"`
-		Kind   string `json:"kind"`
-		Title  string `json:"title"`
-		Body   string `json:"body"`
+		ClanID             string                  `json:"clanId"`
+		Kind               string                  `json:"kind"`
+		Title              string                  `json:"title"`
+		Body               string                  `json:"body"`
+		SenderSubscription browserPushSubscription `json:"senderSubscription"`
 	}
 	if !decodeAdminJSON(w, r, &input) {
 		return
@@ -435,21 +480,34 @@ func (a *app) sendAnnouncement(w http.ResponseWriter, r *http.Request) {
 		securityError(w, 429, "Este aviso já foi enviado. Aguarde o intervalo de uma hora.")
 		return
 	}
-	var recipients int
-	if err = tx.QueryRow(`SELECT COUNT(*) FROM push_subscriptions`).Scan(&recipients); err != nil {
+	sender := input.SenderSubscription
+	var senderID string
+	if validPushSubscription(webpush.Subscription{Endpoint: sender.Endpoint, Keys: sender.Keys}) {
+		senderID = fmt.Sprintf("%x", sha256.Sum256([]byte(sender.Endpoint)))
+	}
+	id := randomPushID()
+	if _, err = tx.Exec(`INSERT INTO announcements(id,clan_id,kind,title,body,created_at,recipients) VALUES(?,?,?,?,?,?,0)`, id, input.ClanID, input.Kind, input.Title, input.Body, now.Unix()); err != nil {
+		securityError(w, 500, "Não foi possível registrar o aviso.")
+		return
+	}
+	jobs, err := tx.Exec(`INSERT INTO push_jobs(id,announcement_id,subscription_id,state,next_at)
+	 SELECT ? || id,?,id,'pending',? FROM push_subscriptions WHERE `+pushClanMatch+` OR (id=? AND p256dh=? AND auth=?)`,
+		id, id, now.Unix(), pushClanPattern(input.ClanID), senderID, sender.Keys.P256dh, sender.Keys.Auth)
+	if err != nil {
+		securityError(w, 500, "Não foi possível registrar o envio.")
+		return
+	}
+	recipients, err := jobs.RowsAffected()
+	if err != nil {
 		securityError(w, 500, "Não foi possível conferir os inscritos.")
 		return
 	}
 	if recipients == 0 {
-		securityError(w, 409, "Ainda não há celulares com avisos ativados. Compartilhe a página de instalação.")
+		securityError(w, 409, "Nenhum celular está inscrito neste clã. Compartilhe a página de instalação.")
 		return
 	}
-	id := randomPushID()
-	if _, err = tx.Exec(`INSERT INTO announcements(id,clan_id,kind,title,body,created_at,recipients) VALUES(?,?,?,?,?,?,?)`, id, input.ClanID, input.Kind, input.Title, input.Body, now.Unix(), recipients); err == nil {
-		_, err = tx.Exec(`INSERT INTO push_jobs(id,announcement_id,subscription_id,state,next_at) SELECT ? || id,?,id,'pending',? FROM push_subscriptions`, id, id, now.Unix())
-	}
-	if err != nil {
-		securityError(w, 500, "Não foi possível registrar o envio.")
+	if _, err = tx.Exec(`UPDATE announcements SET recipients=? WHERE id=?`, recipients, id); err != nil {
+		securityError(w, 500, "Não foi possível registrar o total de inscritos.")
 		return
 	}
 	if err = maintainAnnouncementsTx(r.Context(), tx, now.Unix()); err != nil {
@@ -460,7 +518,7 @@ func (a *app) sendAnnouncement(w http.ResponseWriter, r *http.Request) {
 		securityError(w, 500, "Não foi possível confirmar o envio.")
 		return
 	}
-	jsonResponse(w, 202, map[string]any{"queued": recipients, "nextAt": now.Add(announcementCooldown).Unix()})
+	jsonResponse(w, 202, map[string]any{"id": id, "queued": recipients, "nextAt": now.Add(announcementCooldown).Unix()})
 }
 
 func (a *app) publicPush(next http.Handler) http.Handler {

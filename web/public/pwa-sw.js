@@ -1,5 +1,5 @@
 importScripts('/pwa-state-worker.js');
-const CACHE='imperio-members-v5';
+const CACHE='imperio-members-v6';
 const SHELL=['/app','/member.js','/member.css','/pwa-state.js','/member.webmanifest','/app-icon-192.png','/app-icon-512.png','/app-icon-180.png','/notification-badge.png'];
 self.addEventListener('install',event=>{event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(SHELL)).then(()=>self.skipWaiting()))});
 async function activateMembers(){
@@ -32,10 +32,18 @@ self.addEventListener('fetch',event=>{
  if(url.pathname==='/app'&&event.request.mode==='navigate'){event.respondWith(memberShell(event.request,'/app'));return}
  if(SHELL.includes(url.pathname)&&url.pathname!=='/app'){event.respondWith(memberShell(event.request,url.pathname))}
 });
+async function refreshOpenMemberApps(id,clanId){
+ const clients=await self.clients.matchAll({type:'window',includeUncontrolled:true});
+ for(const client of clients){
+  const url=new URL(client.url);
+  if(url.origin===self.location.origin&&url.pathname==='/app')client.postMessage({type:'imperio-announcement',id,clanId});
+ }
+}
 self.addEventListener('push',event=>{
  let data={};try{data=event.data?.json()||{}}catch{}
- const options={body:data.body||'Abra o app para conferir os avisos de todos os clãs.',icon:'/app-icon-192.png',badge:'/notification-badge.png',tag:data.id||'imperio-aviso',renotify:true,requireInteraction:true,silent:false,vibrate:[220,100,220],data:{url:safePushURL(data.url)}};
- event.waitUntil(self.registration.showNotification(data.title||'📣 Império Bárbaro',options));
+ const options={body:data.body||'Abra o app para conferir os avisos.',icon:'/app-icon-192.png',badge:'/notification-badge.png',tag:data.id||'imperio-aviso',renotify:true,requireInteraction:true,silent:false,vibrate:[220,100,220],data:{url:safePushURL(data.url)}};
+ const refresh=data.clanId&&data.id?refreshOpenMemberApps(data.id,data.clanId).catch(()=>{}):Promise.resolve();
+ event.waitUntil(Promise.all([self.registration.showNotification(data.title||'📣 Império Bárbaro',options),refresh]));
 });
 self.addEventListener('notificationclick',event=>{
  event.notification.close();const url=safePushURL(event.notification.data?.url);
