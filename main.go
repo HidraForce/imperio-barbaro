@@ -115,7 +115,7 @@ func main() {
 		db:            db,
 		clash:         &http.Client{Timeout: 12 * time.Second},
 		token:         os.Getenv("CLASH_API_TOKEN"),
-		clanTags:      map[string]string{"1": normalizeTag(os.Getenv("CLAN_TAG1")), "2": normalizeTag(os.Getenv("CLAN_TAG2"))},
+		clanTags:      configuredClanTags(),
 		staticFS:      assets,
 		contactsVault: vault,
 		notifications: notifications,
@@ -169,12 +169,14 @@ func main() {
 }
 
 func (a *app) config(w http.ResponseWriter, _ *http.Request) {
-	clans := []map[string]any{}
-	for _, id := range []string{"1", "2"} {
-		tag := a.clanTags[id]
-		clans = append(clans, map[string]any{"id": id, "tag": tag, "configured": tag != ""})
+	clans := make([]map[string]any, 0, len(communityClans))
+	hasTag := false
+	for _, clan := range communityClans {
+		tag := a.clanTags[clan.ID]
+		hasTag = hasTag || tag != ""
+		clans = append(clans, map[string]any{"id": clan.ID, "name": clan.Name, "label": clan.Label, "rulesAnchor": clan.RulesAnchor, "tag": tag, "configured": tag != ""})
 	}
-	jsonResponse(w, http.StatusOK, map[string]any{"configured": a.token != "" && (a.clanTags["1"] != "" || a.clanTags["2"] != ""), "clans": clans, "contactsConfigured": a.contactsVault != nil && a.contactsVault.configured})
+	jsonResponse(w, http.StatusOK, map[string]any{"configured": a.token != "" && hasTag, "clans": clans, "contactsConfigured": a.contactsVault != nil && a.contactsVault.configured})
 }
 
 func (a *app) clan(w http.ResponseWriter, r *http.Request) {
@@ -214,16 +216,16 @@ func (a *app) war(w http.ResponseWriter, r *http.Request) {
 func (a *app) selectedClanTag(w http.ResponseWriter, r *http.Request) (string, bool) {
 	id := r.URL.Query().Get("clan")
 	if id == "" {
-		id = "1"
-		if a.clanTags[id] == "" {
-			id = "2"
+		for _, clan := range communityClans {
+			if tag := a.clanTags[clan.ID]; tag != "" {
+				return tag, true
+			}
 		}
-	}
-	tag, validSlot := a.clanTags[id]
-	if !validSlot {
-		jsonResponse(w, http.StatusBadRequest, map[string]string{"error": "Escolha o clã 1 ou o clã 2."})
+	} else if _, valid := findCommunityClan(id); !valid {
+		jsonResponse(w, http.StatusBadRequest, map[string]string{"error": "Escolha um clã válido."})
 		return "", false
 	}
+	tag := a.clanTags[id]
 	if tag == "" {
 		jsonResponse(w, http.StatusServiceUnavailable, map[string]string{"error": "Este clã não tem uma tag configurada no .env."})
 		return "", false
@@ -233,7 +235,7 @@ func (a *app) selectedClanTag(w http.ResponseWriter, r *http.Request) (string, b
 
 func (a *app) clashGET(w http.ResponseWriter, r *http.Request, clanTag, endpoint string) {
 	if a.token == "" || clanTag == "" {
-		jsonResponse(w, http.StatusServiceUnavailable, map[string]string{"error": "Defina CLASH_API_TOKEN e CLAN_TAG1 ou CLAN_TAG2 no .env e reinicie o aplicativo."})
+		jsonResponse(w, http.StatusServiceUnavailable, map[string]string{"error": "Defina CLASH_API_TOKEN e confira as tags dos clãs no .env. Depois, reinicie o aplicativo."})
 		return
 	}
 	body, status, err := a.fetchClash(r.Context(), endpoint)

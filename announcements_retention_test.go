@@ -27,7 +27,7 @@ func TestAnnouncementRetentionKeepsTenPerClanAndProtectsDeliveries(t *testing.T)
 			}
 			a := &app{db: db}
 			now := time.Now().Unix()
-			for _, clan := range []string{"1", "2"} {
+			for _, clan := range []string{"1", "2", "3"} {
 				for i := 0; i < 14; i++ {
 					state, lease := "accepted", int64(0)
 					if clan == "1" && i == 1 {
@@ -48,10 +48,10 @@ func TestAnnouncementRetentionKeepsTenPerClanAndProtectsDeliveries(t *testing.T)
 			if err = maintainAnnouncements(context.Background(), db, now); err != nil {
 				t.Fatal(err)
 			}
-			if pushCount(t, a, `SELECT COUNT(*) FROM announcements WHERE clan_id='1'`) != 12 || pushCount(t, a, `SELECT COUNT(*) FROM announcements WHERE clan_id='2'`) != 10 {
+			if pushCount(t, a, `SELECT COUNT(*) FROM announcements WHERE clan_id='1'`) != 12 || pushCount(t, a, `SELECT COUNT(*) FROM announcements WHERE clan_id='2'`) != 10 || pushCount(t, a, `SELECT COUNT(*) FROM announcements WHERE clan_id='3'`) != 10 {
 				t.Fatal("retention removed active deliveries or mixed the clans")
 			}
-			for _, clan := range []string{"1", "2"} {
+			for _, clan := range []string{"1", "2", "3"} {
 				items, err := a.announcementList(context.Background(), clan)
 				if err != nil || len(items) != 10 || items[0].ID != clan+"-13" || items[9].ID != clan+"-04" {
 					t.Fatalf("incorrect visible history for %s: %+v, %v", clan, items, err)
@@ -66,7 +66,7 @@ func TestAnnouncementRetentionKeepsTenPerClanAndProtectsDeliveries(t *testing.T)
 			if err = maintainAnnouncements(context.Background(), db, now); err != nil {
 				t.Fatal(err)
 			}
-			if pushCount(t, a, `SELECT COUNT(*) FROM announcements`) != 20 || pushCount(t, a, `SELECT COUNT(*) FROM push_jobs`) != 20 {
+			if pushCount(t, a, `SELECT COUNT(*) FROM announcements`) != 30 || pushCount(t, a, `SELECT COUNT(*) FROM push_jobs`) != 30 {
 				t.Fatal("old history or its delivery rows were not deleted")
 			}
 			if pushCount(t, a, `SELECT COUNT(*) FROM push_subscriptions`) != 1 || pushCount(t, a, `SELECT COUNT(*) FROM announcement_cooldowns WHERE next_at>0`) != 1 {

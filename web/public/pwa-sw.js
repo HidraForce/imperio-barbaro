@@ -1,5 +1,5 @@
 importScripts('/pwa-state-worker.js');
-const CACHE='imperio-members-v4';
+const CACHE='imperio-members-v5';
 const SHELL=['/app','/member.js','/member.css','/pwa-state.js','/member.webmanifest','/app-icon-192.png','/app-icon-512.png','/app-icon-180.png','/notification-badge.png'];
 self.addEventListener('install',event=>{event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(SHELL)).then(()=>self.skipWaiting()))});
 async function activateMembers(){
@@ -34,7 +34,7 @@ self.addEventListener('fetch',event=>{
 });
 self.addEventListener('push',event=>{
  let data={};try{data=event.data?.json()||{}}catch{}
- const options={body:data.body||'Abra o app para conferir os avisos dos dois clãs.',icon:'/app-icon-192.png',badge:'/notification-badge.png',tag:data.id||'imperio-aviso',renotify:true,requireInteraction:true,silent:false,vibrate:[220,100,220],data:{url:safePushURL(data.url)}};
+ const options={body:data.body||'Abra o app para conferir os avisos de todos os clãs.',icon:'/app-icon-192.png',badge:'/notification-badge.png',tag:data.id||'imperio-aviso',renotify:true,requireInteraction:true,silent:false,vibrate:[220,100,220],data:{url:safePushURL(data.url)}};
  event.waitUntil(self.registration.showNotification(data.title||'📣 Império Bárbaro',options));
 });
 self.addEventListener('notificationclick',event=>{

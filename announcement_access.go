@@ -43,7 +43,7 @@ func (a *app) resetAnnouncementTimer(w http.ResponseWriter, r *http.Request) {
 	for _, item := range announcementTemplates {
 		validKind = validKind || item.Kind == input.Kind
 	}
-	if (input.ClanID != "1" && input.ClanID != "2") || !validKind {
+	if _, valid := findCommunityClan(input.ClanID); !valid || !validKind {
 		securityError(w, 400, "Escolha o clã e um dos avisos disponíveis.")
 		return
 	}

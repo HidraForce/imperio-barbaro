@@ -17,7 +17,7 @@ import (
 	"time"
 )
 
-func integrationDatabase(t *testing.T, postgres bool) *database {
+func openIntegrationDatabase(t *testing.T, postgres bool) *database {
 	t.Helper()
 	var raw *sql.DB
 	var err error
@@ -54,11 +54,16 @@ func integrationDatabase(t *testing.T, postgres bool) *database {
 		raw.SetMaxOpenConns(1)
 		t.Cleanup(func() { raw.Close() })
 	}
-	db := &database{raw, postgres}
-	if err = initContacts(db); err != nil {
+	return &database{raw, postgres}
+}
+
+func integrationDatabase(t *testing.T, postgres bool) *database {
+	t.Helper()
+	db := openIntegrationDatabase(t, postgres)
+	if err := initContacts(db); err != nil {
 		t.Fatal(err)
 	}
-	if err = initRaids(db); err != nil {
+	if err := initRaids(db); err != nil {
 		t.Fatal(err)
 	}
 	return db
@@ -69,7 +74,7 @@ func TestContactsPersistenceAcrossDatabases(t *testing.T) {
 			db := integrationDatabase(t, postgres)
 			ctx := context.Background()
 			first := contact{RealName: "Bruno", Phone: "5511999999999", Notes: "Líder", Accounts: []contactAccount{{PlayerTag: "#PYQ", PlayerName: "Principal", ClanID: "1"}, {PlayerTag: "#YQL", PlayerName: "Segunda", ClanID: "2"}}}
-			second := contact{RealName: "Outro cadastro", Phone: "5511988888888", Notes: "Apoio", Accounts: []contactAccount{{PlayerTag: "#QPC", PlayerName: "Terceira", ClanID: "1"}}}
+			second := contact{RealName: "Outro cadastro", Phone: "5511988888888", Notes: "Apoio", Accounts: []contactAccount{{PlayerTag: "#QPC", PlayerName: "Terceira", ClanID: "3"}}}
 			if err := writeContact(ctx, db, &first); err != nil {
 				t.Fatal(err)
 			}
@@ -111,6 +116,93 @@ func TestContactsPersistenceAcrossDatabases(t *testing.T) {
 		})
 	}
 }
+
+func TestThirdClanMigrationsPreservePublishedRulesAndContactAccounts(t *testing.T) {
+	for _, postgres := range []bool{false, true} {
+		t.Run(fmt.Sprint("postgres=", postgres), func(t *testing.T) {
+			db := openIntegrationDatabase(t, postgres)
+			ctx := context.Background()
+			schema := contactsSchema
+			if postgres {
+				schema = postgresContactsSchema
+			}
+			for _, query := range strings.Split(strings.ReplaceAll(schema, "('','1','2','3')", "('','1','2')"), ";") {
+				if strings.TrimSpace(query) != "" {
+					if _, err := db.Exec(query); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+			original := contact{RealName: "Pessoa", Phone: "5511999999999", Accounts: []contactAccount{
+				{PlayerTag: "#PYQ", PlayerName: "Principal", ClanID: "1"},
+				{PlayerTag: "#YQL", PlayerName: "Segunda", ClanID: "2"},
+			}}
+			if err := writeContact(ctx, db, &original); err != nil {
+				t.Fatal(err)
+			}
+			if !postgres {
+				if _, err := db.Exec(`INSERT INTO contact_migrations(name) VALUES ('people-v1')`); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if _, err := db.Exec(`CREATE TABLE public_rules(id INTEGER PRIMARY KEY, revision BIGINT NOT NULL, payload TEXT NOT NULL)`); err != nil {
+				t.Fatal(err)
+			}
+			var oldRules rulesDocument
+			if err := json.Unmarshal(rulesDefaults, &oldRules); err != nil {
+				t.Fatal(err)
+			}
+			oldRules.Revision = 7
+			oldRules.Clans = oldRules.Clans[:2]
+			oldRules.General.Title = "Regras publicadas"
+			oldRules.Clans[1].WarSummary = "Resumo personalizado"
+			payload, err := json.Marshal(oldRules)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err = db.Exec(`INSERT INTO public_rules(id,revision,payload) VALUES(1,?,?)`, oldRules.Revision, string(payload)); err != nil {
+				t.Fatal(err)
+			}
+			if err = initContacts(db); err != nil {
+				t.Fatal(err)
+			}
+			if err = initRules(db); err != nil {
+				t.Fatal(err)
+			}
+			migrated, err := listContacts(ctx, db)
+			if err != nil || len(migrated) != 1 || migrated[0].ID != original.ID || migrated[0].Phone != original.Phone ||
+				len(migrated[0].Accounts) != 2 || migrated[0].Accounts[0] != original.Accounts[0] || migrated[0].Accounts[1] != original.Accounts[1] {
+				t.Fatalf("existing contacts changed: %+v, %v", migrated, err)
+			}
+			thirdAccount := contactAccount{PlayerTag: "#GRJ", PlayerName: "Terceira", ClanID: "3"}
+			original.Accounts = append(original.Accounts, thirdAccount)
+			if err = writeContact(ctx, db, &original); err != nil {
+				t.Fatal(err)
+			}
+			if err = initContacts(db); err != nil {
+				t.Fatal(err)
+			}
+			var storedClan string
+			if err = db.QueryRow(`SELECT clan_id FROM contact_accounts WHERE player_tag=?`, thirdAccount.PlayerTag).Scan(&storedClan); err != nil || storedClan != "3" {
+				t.Fatalf("third-clan account missing after restart: %q, %v", storedClan, err)
+			}
+			if err = initRules(db); err != nil {
+				t.Fatal(err)
+			}
+			saved, err := readRules(ctx, db)
+			if err != nil || saved.Revision != 8 || len(saved.Clans) != 3 || saved.Clans[2].ID != "3" {
+				t.Fatalf("third-clan rulebook missing after restart: %+v, %v", saved, err)
+			}
+			saved.Revision = oldRules.Revision
+			saved.Clans = saved.Clans[:2]
+			preserved, err := json.Marshal(saved)
+			if err != nil || string(preserved) != string(payload) {
+				t.Fatal("existing published rules changed")
+			}
+		})
+	}
+}
+
 func TestPostgresContactSessionsAndAttemptsAreShared(t *testing.T) {
 	db := integrationDatabase(t, true)
 	secret := "uma-senha-adicional-privada"

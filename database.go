@@ -91,7 +91,7 @@ CREATE TABLE IF NOT EXISTS contact_people (
 );
 CREATE TABLE IF NOT EXISTS contact_accounts (
  player_tag TEXT PRIMARY KEY CHECK(player_tag=UPPER(player_tag)), contact_id BIGINT NOT NULL,
- player_name TEXT NOT NULL, clan_id TEXT NOT NULL DEFAULT '' CHECK(clan_id IN ('','1','2')),
+ player_name TEXT NOT NULL, clan_id TEXT NOT NULL DEFAULT '' CHECK(clan_id IN ('','1','2','3')),
  FOREIGN KEY(contact_id) REFERENCES contact_people(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS contact_accounts_person ON contact_accounts(contact_id);
@@ -117,6 +117,12 @@ func initPostgresContacts(d *database) error {
 				return err
 			}
 		}
+	}
+	if err = migrateContactClans(tx, []string{
+		`ALTER TABLE contact_accounts DROP CONSTRAINT IF EXISTS contact_accounts_clan_id_check,
+		 ADD CONSTRAINT contact_accounts_clan_id_check CHECK (clan_id IN ('','1','2','3'))`,
+	}); err != nil {
+		return err
 	}
 	return tx.Commit()
 }

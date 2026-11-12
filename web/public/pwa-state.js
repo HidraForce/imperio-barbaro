@@ -9,16 +9,11 @@ export function memberSetup({ios,installed,supported,permission,subscribed,verif
  return installed?'ready':'install'
 }
 
-// Use fixed values rather than carrying DOM, query-string or stored text into
-// navigation URLs. The member app supports exactly these two clans.
 export function memberClan(value) {
- if(value==='1')return '1'
- if(value==='2')return '2'
- return ''
+ return ['1','2','3'].includes(value)?value:''
 }
 
 export function memberAppURL(clan) {
- if(clan==='1')return '/app?clan=1'
- if(clan==='2')return '/app?clan=2'
- return '/app'
+ const id=memberClan(clan)
+ return id?'/app?clan='+id:'/app'
 }

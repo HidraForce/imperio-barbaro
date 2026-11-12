@@ -25,12 +25,12 @@ func maintainAnnouncementsTx(ctx context.Context, tx *databaseTx, now int64) err
 	if _, err := tx.ExecContext(ctx, `UPDATE push_jobs SET state='failed',lease_until=0 WHERE state='pending' AND lease_until<=? AND announcement_id IN (SELECT id FROM announcements WHERE created_at<=?)`, now, now-3600); err != nil {
 		return err
 	}
-	for _, clan := range []string{"1", "2"} {
+	for _, clan := range communityClans {
 		rows, err := tx.QueryContext(ctx, `SELECT a.id FROM announcements a
 		 WHERE a.clan_id=? AND a.id NOT IN
 		 (SELECT id FROM announcements WHERE clan_id=? ORDER BY created_at DESC,id DESC LIMIT ?)
 		 AND NOT EXISTS (SELECT 1 FROM push_jobs j WHERE j.announcement_id=a.id AND (j.state='pending' OR j.lease_until>?))
-		 ORDER BY a.created_at,a.id`, clan, clan, announcementHistoryLimit, now)
+		 ORDER BY a.created_at,a.id`, clan.ID, clan.ID, announcementHistoryLimit, now)
 		if err != nil {
 			return err
 		}

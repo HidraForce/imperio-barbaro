@@ -42,7 +42,7 @@ test('Keeps a saved account selectable when it has left the cached rosters', () 
   assert.equal(saved.disabled,false)
 })
 
-test('Saves multiple selected nicknames from both clans as one person', async () => {
+test('Saves selected nicknames from all three clans as one person', async () => {
   let saved
   const vault = createContactVault(async (path,options) => {
     if(path.endsWith('/unlock'))return Response.json({token:'test-token',expiresAt:new Date(Date.now()+600000).toISOString()})
@@ -54,10 +54,17 @@ test('Saves multiple selected nicknames from both clans as one person', async ()
   await vault.unlock()
   try {
     vault.startNew();vault.form.value.realName='Uma pessoa'
-    const options=contactMemberOptions(clans,lists)
+    const configuredClans=clans.map(clan=>({...clan,configured:true}))
+    const rosters=await loadContactMembers(configuredClans,lists,async path=>{
+      assert.equal(path,'/api/clan?clan=3')
+      return {memberList:[{tag:'#GRJ',name:'Terceira'}]}
+    })
+    const options=contactMemberOptions(configuredClans,rosters.lists)
     assert.equal(selectContactMember(vault.form.value.accounts[0],'#PYQ',options),true)
     vault.addAccount()
     assert.equal(selectContactMember(vault.form.value.accounts[1],'#QPC',options),true)
+    vault.addAccount()
+    assert.equal(selectContactMember(vault.form.value.accounts[2],'#GRJ',options),true)
     await vault.save()
     assert.equal(saved.realName,'Uma pessoa')
     assert.deepEqual(saved.accounts,options)

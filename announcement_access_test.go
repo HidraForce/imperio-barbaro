@@ -92,7 +92,7 @@ func TestTimerReleaseRequiresOwnPasswordAndResetsOnlySelectedButton(t *testing.T
 			t.Fatal("cooldown lost", kind, w.Code)
 		}
 	}
-	for _, bad := range []string{`{"clanId":"3","kind":"raids"}`, `{"clanId":"1","kind":"unknown"}`} {
+	for _, bad := range []string{`{"clanId":"4","kind":"raids"}`, `{"clanId":"1","kind":"unknown"}`} {
 		if w := scopedRequest(h, path, "X-Super-Notifications-Session", timerToken, bad); w.Code != 400 {
 			t.Fatal(w.Code)
 		}

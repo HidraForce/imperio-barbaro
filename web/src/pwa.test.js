@@ -6,7 +6,7 @@ import { memberSetup, memberClan, memberAppURL } from '../public/pwa-state.js'
 
 test('Untrusted clan values cannot change member navigation or inject query parameters',()=>{
  const origin='https://imperiobarbaro.com.br'
- for(const clan of ['1','2']){
+ for(const clan of ['1','2','3']){
   assert.equal(memberClan(clan),clan)
   const url=new URL(memberAppURL(clan),origin)
   assert.equal(url.origin,origin)
@@ -14,7 +14,7 @@ test('Untrusted clan values cannot change member navigation or inject query para
   assert.equal(url.searchParams.get('clan'),clan)
   assert.deepEqual([...url.searchParams.keys()],['clan'])
  }
- for(const value of [null,undefined,1,2,'','3',' 1','1&redirect=https://evil.test','//evil.test','javascript:alert(1)','<img src=x onerror=alert(1)>']){
+ for(const value of [null,undefined,1,2,3,'','4',' 1','1&redirect=https://evil.test','//evil.test','javascript:alert(1)','<img src=x onerror=alert(1)>']){
   assert.equal(memberClan(value),'')
   assert.equal(memberAppURL(value),'/app')
  }
@@ -108,8 +108,12 @@ test('First activation immediately completes the installed app setup',async()=>{
  assert.equal(app.device.storageReads,0)
 })
 
-test('The member feed shows notices from both clans with an explicit label and no clan selection',async()=>{
- const items=[{id:'academy',clanId:'2',clanName:'Império Bárbar2 · Academia',title:'CWL',body:'Use seu ataque.',createdAt:200},{id:'main',clanId:'1',clanName:'Império Bárbaro · Principal',title:'Raids',body:'Use seus ataques.',createdAt:100}]
+test('The member feed shows notices from all clans with an explicit label and no clan selection',async()=>{
+ const items=[
+  {id:'third',clanId:'3',clanName:'Clã 3 · #2CJR2VL8R',title:'Jogos',body:'Faça seus pontos.',createdAt:300},
+  {id:'academy',clanId:'2',clanName:'Império Bárbar2 · Academia',title:'CWL',body:'Use seu ataque.',createdAt:200},
+  {id:'main',clanId:'1',clanName:'Império Bárbaro · Principal',title:'Raids',body:'Use seus ataques.',createdAt:100},
+ ]
  const app=await memberHarness({page:'member',feedItems:items,clan:''})
  await app.activate()
  await app.listeners['refresh-feed:click']()
@@ -117,8 +121,8 @@ test('The member feed shows notices from both clans with an explicit label and n
  assert.ok(app.requests.some(item=>item.path==='/api/push/announcements'))
  assert.ok(!app.requests.some(item=>item.path.includes('?clan=')))
  const cards=app.elements.get('feed-items').children
- assert.deepEqual(cards.map(card=>card.id),['academy','main'])
- assert.deepEqual(cards.map(card=>card.children[1].textContent),['Império Bárbar2 · Academia','Império Bárbaro · Principal'])
+ assert.deepEqual(cards.map(card=>card.id),['third','academy','main'])
+ assert.deepEqual(cards.map(card=>card.children[1].textContent),['Clã 3 · #2CJR2VL8R','Império Bárbar2 · Academia','Império Bárbaro · Principal'])
  for(const name of ['install.html','member.html'])assert.doesNotMatch(await readFile(new URL('../public/'+name,import.meta.url),'utf8'),/id="member-clan"/)
 })
 
@@ -187,7 +191,7 @@ test('Closing and reopening the installed app restores the same device without a
  assert.equal(reopened.device.permissionRequests,1,'reopening cannot ask permission again')
 })
 
-test('Reopening ignores missing or unavailable legacy clan storage and enrolls both clans',async()=>{
+test('Reopening ignores missing or unavailable legacy clan storage and enrolls in community notices',async()=>{
  for(const storageThrows of [false,true]){
   const first=await memberHarness({clan:'2'})
   await first.activate()

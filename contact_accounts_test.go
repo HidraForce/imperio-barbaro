@@ -2,11 +2,11 @@ package main
 
 import "testing"
 
-func TestPersonCanHaveMultipleAccountsInBothClans(t *testing.T) {
+func TestPersonCanHaveAccountsInAllThreeClans(t *testing.T) {
 	c := contact{RealName: " Bruno ", Phone: "+55 11 99999-0000", Accounts: []contactAccount{
 		{PlayerTag: "p0y8lq", PlayerName: "Principal", ClanID: "1"},
 		{PlayerTag: "#QY8L0P", PlayerName: "Secundária", ClanID: "2"},
-		{PlayerTag: "#GRJCUV", PlayerName: "Terceira", ClanID: "1"},
+		{PlayerTag: "#GRJCUV", PlayerName: "Terceira", ClanID: "3"},
 	}}
 	if err := validateContact(&c); err != nil {
 		t.Fatal(err)
@@ -20,7 +20,7 @@ func TestPersonAccountsRejectDuplicatesInvalidClansAndEmptyNames(t *testing.T) {
 	for _, accounts := range [][]contactAccount{
 		{},
 		{{PlayerTag: "#P0Y8LQ", PlayerName: "Principal"}, {PlayerTag: "p0y8lq", PlayerName: "Duplicada"}},
-		{{PlayerTag: "#P0Y8LQ", PlayerName: "Principal", ClanID: "3"}},
+		{{PlayerTag: "#P0Y8LQ", PlayerName: "Principal", ClanID: "4"}},
 		{{PlayerTag: "#P0Y8LQ", PlayerName: ""}},
 	} {
 		c := contact{RealName: "Pessoa", Accounts: accounts}

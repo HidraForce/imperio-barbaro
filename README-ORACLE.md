@@ -43,7 +43,7 @@ Para uma VM nova, clone o repositório e crie `.env.oracle` a partir de `deploy/
 | `DASHBOARD_DOMAIN` | `dashboard.imperiobarbaro.com.br` |
 | `ACME_EMAIL` | E-mail para o certificado HTTPS |
 | `CLASH_API_TOKEN` | Token com o IP público da VM autorizado |
-| `CLAN_TAG1`, `CLAN_TAG2` | Tags dos clãs |
+| `CLAN_TAG1`, `CLAN_TAG2`, `CLAN_TAG3` | Tags dos clãs. O terceiro usa `2CJR2VL8R` por padrão. |
 | `APP_USERNAME`, `APP_PASSWORD` | Login do painel |
 | `CONTACTS_PASSWORD` | Senha separada dos contatos |
 | `NOTIFICATIONS_PASSWORD` | Senha dos avisos personalizados, mínimo 16 caracteres, diferente de APP_PASSWORD |

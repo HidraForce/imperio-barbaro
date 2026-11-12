@@ -55,6 +55,8 @@ func TestLeadershipPersistsEditsAndSeedsOnlyOnce(t *testing.T) {
 	document.Items[0].Role = "  Líder  "
 	document.Items[0].Description = "  Gestão do clã.  "
 	document.Items[1].Name = "  "
+	thirdClanLeader := leadershipItem{ID: "third-clan-leader", ClanID: "3", Role: "Líder", Name: "Nova liderança do clã 3", Description: "Gestão do clã 3."}
+	document.Items = append(document.Items, thirdClanLeader)
 	body, _ := json.Marshal(document)
 	res := leadershipTestSave(&app{db: db}, body)
 	if res.Code != http.StatusOK {
@@ -72,7 +74,7 @@ func TestLeadershipPersistsEditsAndSeedsOnlyOnce(t *testing.T) {
 	}
 	reopened := leadershipTestDB(t, path)
 	persisted, err := readLeadership(context.Background(), reopened)
-	if err != nil || persisted.Revision != 2 || persisted.Items[0].Name != "Nova liderança" || persisted.Items[1].Name != "" {
+	if err != nil || persisted.Revision != 2 || persisted.Items[0].Name != "Nova liderança" || persisted.Items[1].Name != "" || len(persisted.Items) != 15 || persisted.Items[14] != thirdClanLeader {
 		t.Fatalf("restart replaced saved leadership: %+v, %v", persisted, err)
 	}
 }
@@ -90,7 +92,7 @@ func TestLeadershipRejectsInvalidWritesWithoutChangingRoster(t *testing.T) {
 		{"invalid id", func(d *leadershipDocument) { d.Items[0].ID = "<script>" }},
 		{"long id", func(d *leadershipDocument) { d.Items[0].ID = strings.Repeat("a", 65) }},
 		{"duplicate id", func(d *leadershipDocument) { d.Items = append(d.Items, d.Items[0]) }},
-		{"invalid clan", func(d *leadershipDocument) { d.Items[0].ClanID = "3" }},
+		{"invalid clan", func(d *leadershipDocument) { d.Items[0].ClanID = "4" }},
 		{"blank role", func(d *leadershipDocument) { d.Items[0].Role = " " }},
 		{"long role", func(d *leadershipDocument) { d.Items[0].Role = strings.Repeat("á", 101) }},
 		{"long name", func(d *leadershipDocument) { d.Items[0].Name = strings.Repeat("á", 101) }},

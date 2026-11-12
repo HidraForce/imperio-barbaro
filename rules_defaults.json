@@ -179,6 +179,23 @@
           ]
         }
       ]
+    },
+    {
+      "id": "3",
+      "anchor": "regras-cla-3",
+      "name": "Clã 3",
+      "warSummary": "Consulte a liderança do clã.",
+      "inactivitySummary": "Consulte a liderança do clã.",
+      "documentUrl": "",
+      "topics": [
+        {
+          "id": "regras-cla-3-orientacoes",
+          "title": "Orientações do clã",
+          "items": [
+            "Siga as regras gerais da comunidade e consulte a liderança sobre as orientações do clã."
+          ]
+        }
+      ]
     }
   ]
 }

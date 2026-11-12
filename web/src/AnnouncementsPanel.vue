@@ -59,12 +59,12 @@ onUnmounted(()=>{document.removeEventListener('visibilitychange',lockAccess);win
 </script>
 <template>
  <section class="announcements-panel">
-  <div class="announcements-intro"><div><small>O IMPÉRIO NO CELULAR</small><h2>Um toque. Um lembrete.</h2><p>Todos os celulares com avisos ativados recebem os comunicados dos dois clãs. O clã selecionado é identificado no título e no texto de cada aviso. Para receber neste celular, abra o app de membros e ative os avisos uma vez.</p></div><div class="install-share"><label>Link para os novos membros<input :value="installURL" readonly aria-label="Link de instalação"></label><button class="secondary" @click="copy">Copiar link</button><a :href="installURL" target="_blank" rel="noopener">Preparar este celular ↗</a></div></div>
+  <div class="announcements-intro"><div><small>O IMPÉRIO NO CELULAR</small><h2>Um toque. Um lembrete.</h2><p>Todos os celulares com avisos ativados recebem os comunicados de todos os clãs. O clã selecionado é identificado no título e no texto de cada aviso. Para receber neste celular, abra o app de membros e ative os avisos uma vez.</p></div><div class="install-share"><label>Link para os novos membros<input :value="installURL" readonly aria-label="Link de instalação"></label><button class="secondary" @click="copy">Copiar link</button><a :href="installURL" target="_blank" rel="noopener">Preparar este celular ↗</a></div></div>
   <p v-if="loading" role="status">Carregando comunicados…</p>
   <p v-if="error" class="notice error" role="alert">{{ error }} <button :disabled="busy" @click="load()">Atualizar</button></p>
   <p v-if="feedback" class="notice" role="status">{{ feedback }}</p>
   <template v-if="data">
-   <div class="announcement-reach"><strong>{{ data.subscribers }}</strong><span>celular(es) recebendo avisos dos dois clãs</span><span>Intervalo de <b>1 hora por botão</b>, compartilhado entre os líderes.</span></div>
+   <div class="announcement-reach"><strong>{{ data.subscribers }}</strong><span>celular(es) recebendo avisos de todos os clãs</span><span>Intervalo de <b>1 hora por botão</b>, compartilhado entre os líderes.</span></div>
    <p v-if="!data.subscribers" class="notice">Compartilhe o link de instalação. O envio fica disponível quando houver um celular com avisos ativados.</p>
    <section class="timer-access custom-announcement"><div class="section"><div><small>ACESSO PROTEGIDO</small><h2>Liberar intervalo</h2><p>Use a senha de liberação para antecipar um botão. Isso não envia um aviso e mantém a regra das 12 horas de guerra.</p></div><button v-if="timerVault.unlocked.value" class="secondary" @click="timerVault.lock()">Bloquear liberação</button></div>
     <p v-if="!data.timerConfigured" class="notice">A senha de liberação do intervalo ainda não foi configurada.</p>
