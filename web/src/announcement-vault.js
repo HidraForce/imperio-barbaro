@@ -37,11 +37,12 @@ export function createAnnouncementVault(scope, header, api = adminAPI) {
       if (current === generation) lock(failure.message)
     } finally { if (current === generation) busy.value = false }
   }
-  async function request(url, options = {}) {
+  async function request(url, options = {}, send = api) {
     if (!token) throw Error('Desbloqueie este acesso para continuar.')
-    try { return await api(url, { ...options, headers: { ...options.headers, [header]: token } }) }
+    const current = generation
+    try { return await send(url, { ...options, headers: { ...options.headers, [header]: token } }) }
     catch (failure) {
-      if ([401, 423].includes(failure.status)) lock(failure.message)
+      if (current === generation && [401, 423].includes(failure.status)) lock(failure.message)
       throw failure
     }
   }

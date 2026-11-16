@@ -8,9 +8,10 @@ let selectedClanIds=[], savedClanIds=null
 const clanInputs=new Map()
 const receivedAnnouncementIds=new Set()
 const clanStorageKey='imperio-notification-clans'
+let installationObserved=false
 const permission=()=>('Notification'in window?Notification.permission:'default')
 window.addEventListener('beforeinstallprompt',event=>{event.preventDefault();deferredInstall=event;render()})
-window.addEventListener('appinstalled',()=>{deferredInstall=null;resumeSetup()})
+window.addEventListener('appinstalled',()=>{installationObserved=true;deferredInstall=null;return resumeSetup()})
 async function request(path,options={}){
  const response=await fetch(path,{credentials:'omit',cache:'no-store',...options,headers:{'Content-Type':'application/json','X-Clanboard-Request':'1'}})
  const result=await response.json().catch(()=>({}))
@@ -104,10 +105,10 @@ function render(){
 }
 function appKey(){return Uint8Array.from(atob(config.publicKey.replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0))}
 async function saveSubscription(subscription,clanIds){
- return request('/api/push/subscription',{method:'POST',body:JSON.stringify({subscription:subscription.toJSON(),clanIds})})
+ return request('/api/push/subscription',{method:'POST',body:JSON.stringify({subscription:subscription.toJSON(),clanIds,installed:installed()||installationObserved})})
 }
 async function restoreSubscription(subscription){
- return request('/api/push/subscription/restore',{method:'POST',body:JSON.stringify({subscription:subscription.toJSON()})})
+ return request('/api/push/subscription/restore',{method:'POST',body:JSON.stringify({subscription:subscription.toJSON(),installed:installed()||installationObserved})})
 }
 async function sync(){
  if(busy)return

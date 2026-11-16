@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/ecdh"
 	"crypto/rand"
@@ -28,14 +29,43 @@ func notificationTestApp(t *testing.T) (*app, http.Handler) {
 	}
 	a.contactsVault = newContactVault("contacts-test-private-password")
 	r := chi.NewRouter()
-	r.Get("/api/announcements", a.announcementStatus)
-	r.Post("/api/announcements", a.sendAnnouncement)
-	if err := a.initAnnouncementAccess("custom-test-private-password", "timer-test-private-password"); err != nil {
+	if err := a.initAnnouncementAccess("custom-test-private-password", "timer-test-private-password", testClanAnnouncementPasswords()); err != nil {
 		t.Fatal(err)
 	}
 	a.announcementAccessRoutes(r)
 	guard := newAccessGuard("leader", "private-admin-test-password")
 	return a, secureHeaders(a.publicPush(publicHome(a.staticFS, guard.middleware(sameOriginAPI(r)))))
+}
+
+func testClanAnnouncementPasswords() map[string]string {
+	return map[string]string{"1": "clan-one-test-password", "2": "clan-two-test-password", "3": "clan-three-test-password"}
+}
+
+func testClanAnnouncementToken(t *testing.T, a *app, clan string) string {
+	t.Helper()
+	res, token := unlockVault(t, a.clanAnnouncementVaults[clan], testClanAnnouncementPasswords()[clan], "192.0.2.1")
+	if res.Code != 200 || token == "" {
+		t.Fatalf("clan %s unlock: %d %s", clan, res.Code, res.Body)
+	}
+	return token
+}
+
+func announcementTestRequest(handler http.Handler, path, token string, body any, headers ...string) *httptest.ResponseRecorder {
+	payload, err := json.Marshal(body)
+	if err != nil {
+		panic(err)
+	}
+	req := httptest.NewRequest("POST", "https://dashboard.imperiobarbaro.com.br"+path, bytes.NewReader(payload))
+	req.SetBasicAuth("leader", "private-admin-test-password")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Clanboard-Request", "1")
+	req.Header.Set(clanAnnouncementHeader, token)
+	for i := 0; i < len(headers); i += 2 {
+		req.Header.Set(headers[i], headers[i+1])
+	}
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	return res
 }
 func testPushSubscription(t *testing.T) webpush.Subscription {
 	t.Helper()
@@ -64,7 +94,7 @@ func pushCount(t *testing.T, a *app, query string) int {
 }
 
 func TestPushAccessAndOrigin(t *testing.T) {
-	_, h := notificationTestApp(t)
+	a, h := notificationTestApp(t)
 	for _, path := range []string{"/instalar", "/app", "/member.webmanifest", "/pwa-sw.js", "/pwa-state-worker.js", "/app-icon-192.png", "/api/push/config"} {
 		res := adminTestRequest(h, "GET", "https://imperiobarbaro.com.br"+path, nil, false)
 		if res.Code != 200 {
@@ -77,7 +107,7 @@ func TestPushAccessAndOrigin(t *testing.T) {
 	if res := adminTestRequest(h, "POST", "https://dashboard.imperiobarbaro.com.br/api/announcements/custom", map[string]string{"clanId": "1", "kind": "custom", "title": "T", "body": "B"}, true); res.Code != 423 {
 		t.Fatalf("custom bypass %d", res.Code)
 	}
-	if res := adminTestRequest(h, "POST", "https://dashboard.imperiobarbaro.com.br/api/announcements", map[string]string{"clanId": "1", "kind": "custom", "title": "T", "body": "B"}, true); res.Code != 403 {
+	if res := announcementTestRequest(h, "/api/announcements", testClanAnnouncementToken(t, a, "1"), map[string]string{"clanId": "1", "kind": "custom", "title": "T", "body": "B"}); res.Code != 403 {
 		t.Fatalf("preset custom bypass %d", res.Code)
 	}
 	for _, origin := range []string{"https://evil.test", "https://dashboard.imperiobarbaro.com.br"} {
@@ -165,6 +195,7 @@ func TestRestorePushClanRequiresCompleteDeviceSubscription(t *testing.T) {
 
 func TestAnnouncementCooldownAtomicAndPersisted(t *testing.T) {
 	a, h := notificationTestApp(t)
+	tokens := map[string]string{"1": testClanAnnouncementToken(t, a, "1"), "2": testClanAnnouncementToken(t, a, "2")}
 	enrollPush(t, h, "1")
 	enrollPush(t, h, "2")
 	var group sync.WaitGroup
@@ -173,7 +204,7 @@ func TestAnnouncementCooldownAtomicAndPersisted(t *testing.T) {
 		group.Add(1)
 		go func() {
 			defer group.Done()
-			codes <- adminTestRequest(h, "POST", "https://dashboard.imperiobarbaro.com.br/api/announcements", map[string]string{"clanId": "1", "kind": "raids", "body": "tampered"}, true).Code
+			codes <- announcementTestRequest(h, "/api/announcements", tokens["1"], map[string]string{"clanId": "1", "kind": "raids", "body": "tampered"}).Code
 		}()
 	}
 	group.Wait()
@@ -205,25 +236,25 @@ func TestAnnouncementCooldownAtomicAndPersisted(t *testing.T) {
 		t.Fatal("VAPID key rotated")
 	}
 	a.notifications = restarted
-	if res := adminTestRequest(h, "POST", "https://dashboard.imperiobarbaro.com.br/api/announcements", map[string]string{"clanId": "1", "kind": "raids"}, true); res.Code != 429 || res.Header().Get("Retry-After") == "" {
+	if res := announcementTestRequest(h, "/api/announcements", tokens["1"], map[string]string{"clanId": "1", "kind": "raids"}); res.Code != 429 || res.Header().Get("Retry-After") == "" {
 		t.Fatal("cooldown lost on restart")
 	}
 	for _, input := range []map[string]string{{"clanId": "2", "kind": "raids"}, {"clanId": "1", "kind": "games"}} {
-		if res := adminTestRequest(h, "POST", "https://dashboard.imperiobarbaro.com.br/api/announcements", input, true); res.Code != 202 {
+		if res := announcementTestRequest(h, "/api/announcements", tokens[input["clanId"]], input); res.Code != 202 {
 			t.Fatalf("independent button blocked %d", res.Code)
 		}
 	}
 	if _, err := a.db.Exec(`UPDATE announcement_cooldowns SET next_at=0`); err != nil {
 		t.Fatal(err)
 	}
-	if res := adminTestRequest(h, "POST", "https://dashboard.imperiobarbaro.com.br/api/announcements", map[string]string{"clanId": "1", "kind": "raids"}, true); res.Code != 202 {
+	if res := announcementTestRequest(h, "/api/announcements", tokens["1"], map[string]string{"clanId": "1", "kind": "raids"}); res.Code != 202 {
 		t.Fatal("expired cooldown stayed blocked")
 	}
 }
 
 func TestEmptyAudienceDoesNotConsumeCooldown(t *testing.T) {
 	a, h := notificationTestApp(t)
-	res := adminTestRequest(h, "POST", "https://dashboard.imperiobarbaro.com.br/api/announcements", map[string]string{"clanId": "1", "kind": "raids"}, true)
+	res := announcementTestRequest(h, "/api/announcements", testClanAnnouncementToken(t, a, "1"), map[string]string{"clanId": "1", "kind": "raids"})
 	if res.Code != 409 || pushCount(t, a, `SELECT COUNT(*) FROM announcement_cooldowns`) != 0 {
 		t.Fatal("empty audience consumed cooldown")
 	}
@@ -243,6 +274,7 @@ func TestCustomPasswordAndPublicFeed(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Clanboard-Request", "1")
 	req.Header.Set("X-Notifications-Session", session.Token)
+	req.Header.Set(clanAnnouncementHeader, testClanAnnouncementToken(t, a, "1"))
 	res := httptest.NewRecorder()
 	h.ServeHTTP(res, req)
 	if res.Code != 202 {
@@ -274,8 +306,9 @@ func (c *pushTestClient) Do(r *http.Request) (*http.Response, error) {
 
 func TestPushDeliveryRetriesExpiredSubscriptionsAndRestart(t *testing.T) {
 	a, h := notificationTestApp(t)
+	token := testClanAnnouncementToken(t, a, "1")
 	enrollPush(t, h, "1")
-	res := adminTestRequest(h, "POST", "https://dashboard.imperiobarbaro.com.br/api/announcements", map[string]string{"clanId": "1", "kind": "raids"}, true)
+	res := announcementTestRequest(h, "/api/announcements", token, map[string]string{"clanId": "1", "kind": "raids"})
 	if res.Code != 202 {
 		t.Fatal(res.Body.String())
 	}
@@ -298,7 +331,7 @@ func TestPushDeliveryRetriesExpiredSubscriptionsAndRestart(t *testing.T) {
 		t.Fatal("accepted notification redelivered")
 	}
 	a.db.Exec(`UPDATE announcement_cooldowns SET next_at=0`)
-	adminTestRequest(h, "POST", "https://dashboard.imperiobarbaro.com.br/api/announcements", map[string]string{"clanId": "1", "kind": "raids"}, true)
+	announcementTestRequest(h, "/api/announcements", token, map[string]string{"clanId": "1", "kind": "raids"})
 	client.status = 410
 	a.dispatchPush(context.Background())
 	if pushCount(t, a, `SELECT COUNT(*) FROM push_subscriptions`) != 0 {

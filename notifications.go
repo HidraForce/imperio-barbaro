@@ -99,6 +99,9 @@ func initNotifications(db *database) (*notificationService, error) {
 			return nil, err
 		}
 	}
+	if err = initPushInstallations(tx); err != nil {
+		return nil, err
+	}
 	var public, private string
 	err = tx.QueryRow(`SELECT public_key,private_key FROM push_keys WHERE id=1`).Scan(&public, &private)
 	if err == sql.ErrNoRows {
@@ -117,6 +120,19 @@ func initNotifications(db *database) (*notificationService, error) {
 		return nil, err
 	}
 	return &notificationService{publicKey: public, privateKey: private, client: &http.Client{Timeout: 12 * time.Second, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}}, nil
+}
+
+func initPushInstallations(tx *databaseTx) error {
+	if tx.postgres {
+		_, err := tx.Exec(`ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS installed INTEGER NOT NULL DEFAULT 0`)
+		return err
+	}
+	var exists bool
+	if err := tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM pragma_table_info('push_subscriptions') WHERE name='installed')`).Scan(&exists); err != nil || exists {
+		return err
+	}
+	_, err := tx.Exec(`ALTER TABLE push_subscriptions ADD COLUMN installed INTEGER NOT NULL DEFAULT 0`)
+	return err
 }
 
 func randomPushID() string {
@@ -184,6 +200,7 @@ func (a *app) subscribePush(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		ClanID       string                  `json:"clanId"`
 		ClanIDs      []string                `json:"clanIds"`
+		Installed    bool                    `json:"installed"`
 		Subscription browserPushSubscription `json:"subscription"`
 	}
 	if !decodeAdminJSON(w, r, &input) {
@@ -216,10 +233,12 @@ func (a *app) subscribePush(w http.ResponseWriter, r *http.Request) {
 	id := fmt.Sprintf("%x", sha256.Sum256([]byte(s.Endpoint)))
 	// The id is a capability, never returned in a public list. Deletion requires
 	// the complete subscription rather than a guessable member identifier.
-	err := a.db.QueryRowContext(r.Context(), `INSERT INTO push_subscriptions(id,endpoint,p256dh,auth,clan_id,updated_at) VALUES(?,?,?,?,?,?)
+	err := a.db.QueryRowContext(r.Context(), `INSERT INTO push_subscriptions(id,endpoint,p256dh,auth,clan_id,updated_at,installed) VALUES(?,?,?,?,?,?,?)
 	 ON CONFLICT(id) DO UPDATE SET p256dh=excluded.p256dh,auth=excluded.auth,
 	 clan_id=CASE WHEN excluded.clan_id NOT LIKE '%,%' AND push_subscriptions.clan_id LIKE '%,%' THEN push_subscriptions.clan_id ELSE excluded.clan_id END,
-	 updated_at=excluded.updated_at RETURNING clan_id`, id, s.Endpoint, s.Keys.P256dh, s.Keys.Auth, preference, time.Now().Unix()).Scan(&preference)
+	 updated_at=excluded.updated_at,
+	 installed=CASE WHEN excluded.installed=1 THEN 1 ELSE push_subscriptions.installed END
+	 RETURNING clan_id`, id, s.Endpoint, s.Keys.P256dh, s.Keys.Auth, preference, time.Now().Unix(), boolInt(input.Installed)).Scan(&preference)
 	if err != nil {
 		securityError(w, 500, "Não foi possível ativar os avisos. Tente novamente.")
 		return
@@ -246,6 +265,7 @@ func (a *app) unsubscribePush(w http.ResponseWriter, r *http.Request) {
 // browser subscription is the capability; an endpoint alone cannot reveal it.
 func (a *app) restorePush(w http.ResponseWriter, r *http.Request) {
 	var input struct {
+		Installed    bool                    `json:"installed"`
 		Subscription browserPushSubscription `json:"subscription"`
 	}
 	if !decodeAdminJSON(w, r, &input) {
@@ -257,7 +277,11 @@ func (a *app) restorePush(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var clan string
-	err := a.db.QueryRowContext(r.Context(), `SELECT clan_id FROM push_subscriptions WHERE endpoint=? AND p256dh=? AND auth=?`, s.Endpoint, s.Keys.P256dh, s.Keys.Auth).Scan(&clan)
+	query := `SELECT clan_id FROM push_subscriptions WHERE endpoint=? AND p256dh=? AND auth=?`
+	if input.Installed {
+		query = `UPDATE push_subscriptions SET installed=1 WHERE endpoint=? AND p256dh=? AND auth=? RETURNING clan_id`
+	}
+	err := a.db.QueryRowContext(r.Context(), query, s.Endpoint, s.Keys.P256dh, s.Keys.Auth).Scan(&clan)
 	if err == sql.ErrNoRows {
 		jsonResponse(w, 200, map[string]any{"clanId": "", "clanIds": []string{}})
 		return
@@ -340,6 +364,22 @@ func (a *app) announcementStatus(w http.ResponseWriter, r *http.Request) {
 		securityError(w, 400, "Escolha o clã.")
 		return
 	}
+	var subscribers int
+	if err := a.db.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM push_subscriptions WHERE `+pushClanMatch, pushClanPattern(id)).Scan(&subscribers); err != nil {
+		securityError(w, 500, "Não foi possível conferir as inscrições.")
+		return
+	}
+	clanVault := a.clanAnnouncementVaults[id]
+	status := map[string]any{
+		"clanName": announcementClanName(id), "subscribers": subscribers, "clanConfigured": clanVault != nil && clanVault.configured,
+	}
+	if r.Header.Get(clanAnnouncementHeader) == "" {
+		jsonResponse(w, 200, status)
+		return
+	}
+	if !a.authorizeClanAnnouncement(w, r, id) {
+		return
+	}
 	items, err := a.announcementList(r.Context(), id)
 	if err != nil {
 		securityError(w, 500, "Não foi possível carregar os comunicados.")
@@ -365,12 +405,23 @@ func (a *app) announcementStatus(w http.ResponseWriter, r *http.Request) {
 		securityError(w, 500, "Não foi possível conferir os intervalos.")
 		return
 	}
-	var subscribers int
-	if err = a.db.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM push_subscriptions WHERE `+pushClanMatch, pushClanPattern(id)).Scan(&subscribers); err != nil {
+	status["templates"] = announcementTemplates
+	status["cooldowns"] = cooldowns
+	status["items"] = items
+	status["serverTime"] = time.Now().Unix()
+	status["customConfigured"] = a.customVault != nil && a.customVault.configured
+	status["timerConfigured"] = a.timerVault != nil && a.timerVault.configured
+	jsonResponse(w, 200, status)
+}
+
+func (a *app) announcementAudience(w http.ResponseWriter, r *http.Request) {
+	var subscribers, installed int
+	err := a.db.QueryRowContext(r.Context(), `SELECT COUNT(*),COUNT(CASE WHEN installed=1 THEN 1 END) FROM push_subscriptions`).Scan(&subscribers, &installed)
+	if err != nil {
 		securityError(w, 500, "Não foi possível conferir as inscrições.")
 		return
 	}
-	jsonResponse(w, 200, map[string]any{"clanName": announcementClanName(id), "templates": announcementTemplates, "cooldowns": cooldowns, "items": items, "subscribers": subscribers, "serverTime": time.Now().Unix(), "customConfigured": a.customVault != nil && a.customVault.configured, "timerConfigured": a.timerVault != nil && a.timerVault.configured})
+	jsonResponse(w, 200, map[string]int{"subscribers": subscribers, "installed": installed})
 }
 
 func (a *app) warReminderReady(ctx context.Context, clanID string, second bool, now time.Time) error {
@@ -415,6 +466,9 @@ func (a *app) sendAnnouncement(w http.ResponseWriter, r *http.Request) {
 	}
 	if _, valid := findCommunityClan(input.ClanID); !valid {
 		securityError(w, 400, "Escolha o clã.")
+		return
+	}
+	if !a.authorizeClanAnnouncement(w, r, input.ClanID) {
 		return
 	}
 	if a.notifications == nil {

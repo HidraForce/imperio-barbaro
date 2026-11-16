@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { adminAPI } from './admin-api.js'
 import { createAnnouncementVault } from './announcement-vault.js'
 const props=defineProps({clanId:String,war:Object,warLoading:Boolean})
+const clanVault=createAnnouncementVault('clans/'+props.clanId,'X-Clan-Announcements-Session')
 const vault=createAnnouncementVault('custom','X-Notifications-Session')
 const timerVault=createAnnouncementVault('timer','X-Super-Notifications-Session')
 const data=ref(null),error=ref(''),feedback=ref(''),busy=ref(false),loading=ref(true),title=ref(''),body=ref(''),now=ref(Date.now()),offset=ref(0)
@@ -10,6 +11,7 @@ const sentNoticeURL=ref('')
 const installURL='https://imperiobarbaro.com.br/instalar'
 let generation=0,timer,poll
 const timestamp=computed(()=>Math.floor((now.value+offset.value)/1000))
+const clanAccess=computed(()=>clanVault.unlocked.value&&Array.isArray(data.value?.templates))
 function remaining(kind){return Math.max(0,(data.value?.cooldowns?.[kind]||0)-timestamp.value)}
 function waitLabel(kind){const n=remaining(kind);return n?`Disponível em ${Math.floor(n/60)}:${String(n%60).padStart(2,'0')}`:'Enviar aviso'}
 function warDate(value){return Date.parse(value?.replace(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})\.000Z$/,'$1-$2-$3T$4:$5:$6Z'))}
@@ -24,20 +26,27 @@ function warBlock(kind){
 async function load(silent=false){
  const current=++generation,clan=props.clanId
  if(!silent){loading.value=true;data.value=null;error.value=''}
- try{const value=await adminAPI('/api/announcements?clan='+clan);if(current!==generation||clan!==props.clanId)return;data.value=value;offset.value=value.serverTime*1000-Date.now()}
+ try{
+  const url='/api/announcements?clan='+encodeURIComponent(clan)
+  const value=clanVault.unlocked.value?await clanVault.request(url):await adminAPI(url)
+  if(current!==generation)return
+  data.value=value
+  if(value.serverTime)offset.value=value.serverTime*1000-Date.now()
+ }
  catch(e){if(current===generation)error.value=e.message}
  finally{if(current===generation)loading.value=false}
 }
 async function send(kind){
- if(busy.value||!data.value||remaining(kind)||warBlock(kind))return
+ if(busy.value||!clanAccess.value||remaining(kind)||warBlock(kind))return
  const clan=props.clanId
  busy.value=true;error.value='';feedback.value='';sentNoticeURL.value=''
  try{
   const input={clanId:clan,kind,...(kind==='custom'?{title:title.value,body:body.value}:{})}
   const senderSubscription=await currentDeviceSubscription()
   if(senderSubscription)input.senderSubscription=senderSubscription
-  const result=kind==='custom'?await vault.request('/api/announcements/custom',{method:'POST',body:JSON.stringify(input)}):await adminAPI('/api/announcements',{method:'POST',body:JSON.stringify(input)})
-  if(clan!==props.clanId)return
+  const options={method:'POST',body:JSON.stringify(input)}
+  const result=kind==='custom'?await vault.request('/api/announcements/custom',options,clanVault.request):await clanVault.request('/api/announcements',options)
+  if(!clanAccess.value)return
   feedback.value=`Aviso na fila para ${result.queued} celular(es). Acompanhe o envio abaixo.`
   sentNoticeURL.value='/app#'+encodeURIComponent(result.id)
   data.value.cooldowns[kind]=result.nextAt
@@ -56,16 +65,19 @@ async function currentDeviceSubscription(){
 function date(n){return new Date(n*1000).toLocaleString('pt-BR')}
 async function copy(){try{await navigator.clipboard.writeText(installURL);feedback.value='Link de instalação copiado.'}catch{feedback.value='Copie o link de instalação exibido acima.'}}
 async function resetTimer(kind){
- if(busy.value||!timerVault.unlocked.value)return
+ if(busy.value||!clanAccess.value||!timerVault.unlocked.value)return
  const clan=props.clanId
  busy.value=true;error.value='';feedback.value=''
- try{await timerVault.request('/api/announcements/timer/reset',{method:'POST',body:JSON.stringify({clanId:clan,kind})});if(clan===props.clanId)feedback.value='Intervalo liberado para este botão. O próximo envio inicia uma nova hora.'}
+ try{await timerVault.request('/api/announcements/timer/reset',{method:'POST',body:JSON.stringify({clanId:clan,kind})},clanVault.request);if(clanAccess.value)feedback.value='Intervalo liberado para este botão. O próximo envio inicia uma nova hora.'}
  catch(e){if(clan===props.clanId)error.value=e.message}
  finally{busy.value=false;await load(true)}
 }
-function lockAccess(){if(document.hidden){vault.lock();timerVault.lock()}}
-function lockAll(){vault.lock();timerVault.lock()}
-watch(()=>props.clanId,()=>{feedback.value='';sentNoticeURL.value='';load()})
+function lockAccess(){if(document.hidden)lockAll()}
+function lockAll(){clanVault.lock();vault.lock();timerVault.lock()}
+watch(clanVault.unlocked,unlocked=>{
+ if(!unlocked){vault.lock();timerVault.lock();title.value='';body.value='';feedback.value='';sentNoticeURL.value=''}
+ load()
+})
 onMounted(()=>{document.addEventListener('visibilitychange',lockAccess);window.addEventListener('pagehide',lockAll);load();timer=setInterval(()=>{now.value=Date.now()},1000);poll=setInterval(()=>{if(!document.hidden&&!busy.value)load(true)},15000)})
 onUnmounted(()=>{document.removeEventListener('visibilitychange',lockAccess);window.removeEventListener('pagehide',lockAll);lockAll();generation++;clearInterval(timer);clearInterval(poll)})
 </script>
@@ -75,8 +87,17 @@ onUnmounted(()=>{document.removeEventListener('visibilitychange',lockAccess);win
   <p v-if="loading" role="status">Carregando comunicados…</p>
   <p v-if="error" class="notice error" role="alert">{{ error }} <button :disabled="busy" @click="load()">Atualizar</button></p>
   <p v-if="feedback" class="notice" role="status">{{ feedback }} <a v-if="sentNoticeURL" :href="sentNoticeURL" target="_blank" rel="noopener">Ver aviso no app ↗</a></p>
-  <template v-if="data">
-   <div class="announcement-reach"><strong>{{ data.subscribers }}</strong><span>celular(es) inscritos neste clã</span><span>Intervalo de <b>1 hora por botão</b>, compartilhado entre os líderes.</span></div>
+  <div v-if="data" class="announcement-reach"><strong>{{ data.subscribers }}</strong><span>inscrições ativas · {{ data.clanName }}</span><span>Intervalo de <b>1 hora por botão</b></span></div>
+  <section v-if="data" class="custom-announcement">
+   <div class="section"><h2>Comunicados · {{ data.clanName }}</h2><button v-if="clanVault.unlocked.value" type="button" class="secondary" @click="lockAll">Bloquear clã</button></div>
+   <p v-if="!data.clanConfigured" class="notice">A senha de comunicados deste clã ainda precisa ser configurada.</p>
+   <form v-else-if="!clanVault.unlocked.value" @submit.prevent="clanVault.unlock">
+    <label>Senha de comunicados do clã<input v-model="clanVault.password.value" type="password" autocomplete="off" required :disabled="clanVault.busy.value"></label>
+    <button class="primary" :disabled="clanVault.busy.value">{{ clanVault.busy.value?'Desbloqueando…':'Desbloquear comunicados' }}</button>
+   </form>
+   <p v-if="clanVault.error.value" role="alert">{{ clanVault.error.value }}</p>
+  </section>
+  <template v-if="clanAccess">
    <p v-if="!data.subscribers" class="notice">Nenhum celular inscrito neste clã. Compartilhe o link de instalação ou ative os avisos neste navegador.</p>
    <section class="timer-access custom-announcement"><div class="section"><div><small>ACESSO PROTEGIDO</small><h2>Liberar intervalo</h2><p>Use a senha de liberação para antecipar um botão. Isso não envia um aviso e mantém a regra das 12 horas de guerra.</p></div><button v-if="timerVault.unlocked.value" class="secondary" @click="timerVault.lock()">Bloquear liberação</button></div>
     <p v-if="!data.timerConfigured" class="notice">A senha de liberação do intervalo ainda não foi configurada.</p>

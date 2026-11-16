@@ -194,23 +194,23 @@ func (v *contactVault) unlockShared(w http.ResponseWriter, r *http.Request, pass
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	json.NewEncoder(w).Encode(map[string]any{"token": token, "expiresAt": expires.UTC().Format(time.RFC3339)})
 }
-func (v *contactVault) protectShared(w http.ResponseWriter, r *http.Request, next http.Handler) {
+func (v *contactVault) authorizeShared(w http.ResponseWriter, r *http.Request) bool {
 	token := r.Header.Get(v.header)
 	if len(token) != 43 {
 		securityError(w, 423, "Acesso bloqueado. Informe a senha exclusiva para continuar.")
-		return
+		return false
 	}
 	var expiry int64
 	err := v.store.QueryRowContext(r.Context(), `SELECT expires FROM crm_state WHERE key=?`, privateStateKey(v.scope+"-session:", v.password, token)).Scan(&expiry)
 	if err != nil && err != sql.ErrNoRows {
 		sharedUnavailable(w)
-		return
+		return false
 	}
 	if err == sql.ErrNoRows || v.now().UnixMilli() >= expiry {
 		securityError(w, 423, "Acesso bloqueado. Informe a senha exclusiva para continuar.")
-		return
+		return false
 	}
-	next.ServeHTTP(w, r)
+	return true
 }
 func (v *contactVault) lockShared(w http.ResponseWriter, r *http.Request) {
 	if _, err := v.store.ExecContext(r.Context(), `DELETE FROM crm_state WHERE key=?`, privateStateKey(v.scope+"-session:", v.password, r.Header.Get(v.header))); err != nil {

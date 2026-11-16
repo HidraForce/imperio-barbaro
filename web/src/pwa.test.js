@@ -61,7 +61,7 @@ test('Worker displays closed-app pushes and refreshes only member windows on the
 
 const memberClans=[{id:'1',name:'Império Bárbaro · Principal'},{id:'2',name:'Império Bárbar2'},{id:'3',name:'Império Bárbaro 3'}]
 
-async function memberHarness({permission='granted',existing=true,saveFailure=false,clanIds,storageThrows=false,device,subscribeFailure=false,page='install',feedItems=[],hash=''}={}){
+async function memberHarness({permission='granted',existing=true,saveFailure=false,clanIds,storageThrows=false,device,subscribeFailure=false,page='install',feedItems=[],hash='',standalone=true}={}){
  device??={permission,existing,enrolled:existing,clanIds,subscribeCalls:0,permissionRequests:0}
  let readFailure=false
  const elements=new Map(),listeners={},swListeners={}
@@ -74,7 +74,7 @@ async function memberHarness({permission='granted',existing=true,saveFailure=fal
   isSecureContext:true,PushManager:function(){},Notification:{get permission(){return device.permission},set permission(value){device.permission=value},requestPermission:async()=>{device.permissionRequests++;device.permission='granted';return 'granted'}},
   navigator:{userAgent:'Android',platform:'Linux',serviceWorker:{register:async()=>{registered();return {pushManager:{getSubscription(){throw Error('Inactive registration used')}}}},ready,addEventListener:(name,fn)=>swListeners[name]=fn}},
   document:{hidden:false,body:{dataset:{page},classList:{toggle(){}}},getElementById:element,createElement:()=>element(Symbol()),addEventListener:(name,fn)=>listeners['document:'+name]=fn},
-  matchMedia:()=>({matches:true}),localStorage:{getItem:()=>{if(storageThrows)throw Error('Storage unavailable');return device.localClans},setItem:(key,value)=>{if(storageThrows)throw Error('Storage unavailable');device.localClans=value}},location:{search:'',pathname:page==='member'?'/app':'/instalar',hash},history:{replaceState(){}},
+  matchMedia:()=>({matches:standalone}),localStorage:{getItem:()=>{if(storageThrows)throw Error('Storage unavailable');return device.localClans},setItem:(key,value)=>{if(storageThrows)throw Error('Storage unavailable');device.localClans=value}},location:{search:'',pathname:page==='member'?'/app':'/instalar',hash},history:{replaceState(){}},
   setInterval(){return 1},
   fetch:async(path,options)=>{
    requests.push({path,options})
@@ -126,7 +126,19 @@ test('First activation immediately completes the installed app setup',async()=>{
  assert.equal(app.elements.get('enable-notifications').hidden,true)
  assert.equal(app.elements.get('setup-status').textContent,'Avisos ativados.')
  assert.equal(app.elements.get('test-notification').hidden,false)
- assert.deepEqual(JSON.parse(app.requests.find(item=>item.path==='/api/push/subscription').options.body),{subscription:{endpoint:'device-only'},clanIds:['1','2','3']})
+ assert.deepEqual(JSON.parse(app.requests.find(item=>item.path==='/api/push/subscription').options.body),{subscription:{endpoint:'device-only'},clanIds:['1','2','3'],installed:true})
+})
+
+test('Only standalone launches or a browser installation event report an installation',async()=>{
+ const browser=await memberHarness({standalone:false})
+ await browser.activate()
+ const readRestore=app=>app.requests.filter(item=>item.path==='/api/push/subscription/restore').map(item=>JSON.parse(item.options.body).installed)
+ assert.deepEqual(readRestore(browser),[false])
+ await browser.listeners['window:appinstalled']()
+ assert.deepEqual(readRestore(browser),[false,true])
+ const installed=await memberHarness()
+ await installed.activate()
+ assert.deepEqual(readRestore(installed),[true])
 })
 
 test('An open member feed shows selected clans and refreshes when a sender copy arrives',async()=>{

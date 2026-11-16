@@ -35,6 +35,9 @@ func TestAllClansReachEveryDeviceIncludingLegacyEnrollments(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			if err = a.initAnnouncementAccess("", "", testClanAnnouncementPasswords()); err != nil {
+				t.Fatal(err)
+			}
 			h := a.publicPush(http.NotFoundHandler())
 			mainDevice := enrollPush(t, h, "1")
 			academyDevice := enrollPush(t, h, "2")
@@ -50,7 +53,7 @@ func TestAllClansReachEveryDeviceIncludingLegacyEnrollments(t *testing.T) {
 				t.Fatal("enrollment required a clan or duplicated a device")
 			}
 			for _, clan := range []string{"1", "2", "3"} {
-				res := adminTestRequest(http.HandlerFunc(a.sendAnnouncement), "POST", "https://dashboard.imperiobarbaro.com.br/api/announcements", map[string]string{"clanId": clan, "kind": "raids"}, true)
+				res := announcementTestRequest(http.HandlerFunc(a.sendAnnouncement), "/api/announcements", testClanAnnouncementToken(t, a, clan), map[string]string{"clanId": clan, "kind": "raids"})
 				if res.Code != 202 {
 					t.Fatalf("publish %s: %d %s", clan, res.Code, res.Body.String())
 				}
@@ -133,6 +136,7 @@ func TestSelectedClansAndAuthenticatedSenderReceiveOnePushPerDevice(t *testing.T
 	a, handler := notificationTestApp(t)
 	const dashboard = "https://dashboard.imperiobarbaro.com.br"
 	const community = "https://imperiobarbaro.com.br"
+	tokens := map[string]string{"2": testClanAnnouncementToken(t, a, "2"), "3": testClanAnnouncementToken(t, a, "3")}
 	enroll := func(origin string, subscription webpush.Subscription, clans []string, status int) {
 		t.Helper()
 		res := adminTestRequest(handler, "POST", origin+"/api/push/subscription", map[string]any{"subscription": subscription, "clanIds": clans}, origin == dashboard)
@@ -142,7 +146,7 @@ func TestSelectedClansAndAuthenticatedSenderReceiveOnePushPerDevice(t *testing.T
 	}
 	publish := func(clan, kind string, sender webpush.Subscription, status, queued int) string {
 		t.Helper()
-		res := adminTestRequest(handler, "POST", dashboard+"/api/announcements", map[string]any{"clanId": clan, "kind": kind, "senderSubscription": sender}, true)
+		res := announcementTestRequest(handler, "/api/announcements", tokens[clan], map[string]any{"clanId": clan, "kind": kind, "senderSubscription": sender})
 		if res.Code != status {
 			t.Fatalf("publish: %d %s", res.Code, res.Body)
 		}
@@ -190,5 +194,65 @@ func TestSelectedClansAndAuthenticatedSenderReceiveOnePushPerDevice(t *testing.T
 	}
 	if announcementClanName("2") != "Império Bárbar2" {
 		t.Fatal("unexpected second-clan label")
+	}
+}
+
+func TestAnnouncementAudienceCountsSelectionsAndConfirmedInstallations(t *testing.T) {
+	for _, postgres := range []bool{false, true} {
+		t.Run(fmt.Sprint("postgres=", postgres), func(t *testing.T) {
+			a := &app{db: integrationDatabase(t, postgres)}
+			if _, err := a.db.Exec(`CREATE TABLE push_subscriptions (id TEXT PRIMARY KEY, endpoint TEXT NOT NULL UNIQUE, p256dh TEXT NOT NULL, auth TEXT NOT NULL, clan_id TEXT NOT NULL, updated_at BIGINT NOT NULL)`); err != nil {
+				t.Fatal(err)
+			}
+			legacy := testPushSubscription(t)
+			if _, err := a.db.Exec(`INSERT INTO push_subscriptions(id,endpoint,p256dh,auth,clan_id,updated_at) VALUES('legacy',?,?,?,'all',0)`, legacy.Endpoint, legacy.Keys.P256dh, legacy.Keys.Auth); err != nil {
+				t.Fatal(err)
+			}
+			for range 2 {
+				if _, err := initNotifications(a.db); err != nil {
+					t.Fatal(err)
+				}
+			}
+			public := a.publicPush(http.NotFoundHandler())
+			const endpoint = "https://imperiobarbaro.com.br/api/push/subscription"
+			third, multi, browser := testPushSubscription(t), testPushSubscription(t), testPushSubscription(t)
+			subscribe := func(s webpush.Subscription, clans []string, installed bool) {
+				t.Helper()
+				res := adminTestRequest(public, "POST", endpoint, map[string]any{"subscription": s, "clanIds": clans, "installed": installed}, false)
+				if res.Code != 200 {
+					t.Fatalf("subscribe: %d %s", res.Code, res.Body)
+				}
+			}
+			subscribe(third, []string{"3"}, true)
+			subscribe(multi, []string{"1", "3"}, true)
+			subscribe(multi, []string{"1", "3"}, false)
+			subscribe(browser, []string{"2"}, false)
+			for clan, want := range map[string]int{"1": 2, "2": 2, "3": 3} {
+				res := adminTestRequest(http.HandlerFunc(a.announcementStatus), "GET", "/api/announcements?clan="+clan, nil, true)
+				var data struct{ Subscribers int }
+				if json.Unmarshal(res.Body.Bytes(), &data) != nil || res.Code != 200 || data.Subscribers != want {
+					t.Fatalf("clan %s should have %d subscribers: %d %s", clan, want, res.Code, res.Body)
+				}
+			}
+			checkAudience := func(subscribers, installed int) {
+				t.Helper()
+				res := adminTestRequest(http.HandlerFunc(a.announcementAudience), "GET", "/api/announcements/audience", nil, true)
+				var data struct{ Subscribers, Installed int }
+				if json.Unmarshal(res.Body.Bytes(), &data) != nil || res.Code != 200 || data.Subscribers != subscribers || data.Installed != installed {
+					t.Fatalf("overview should have %d subscribers and %d installs: %d %s", subscribers, installed, res.Code, res.Body)
+				}
+			}
+			checkAudience(4, 2)
+			restore := adminTestRequest(public, "POST", endpoint+"/restore", map[string]any{"subscription": legacy, "installed": true}, false)
+			if restore.Code != 200 || !strings.Contains(restore.Body.String(), `"clanIds":["1","2","3"]`) {
+				t.Fatalf("legacy installation: %d %s", restore.Code, restore.Body)
+			}
+			checkAudience(4, 3)
+			deletion := adminTestRequest(public, "DELETE", endpoint, map[string]string{"endpoint": third.Endpoint, "auth": third.Keys.Auth}, false)
+			if deletion.Code != 204 {
+				t.Fatal(deletion.Code)
+			}
+			checkAudience(3, 2)
+		})
 	}
 }
