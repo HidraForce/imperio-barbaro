@@ -23,6 +23,7 @@ import (
 )
 
 const announcementCooldown = time.Hour
+const secondWarAttackHours = 15
 
 type notificationService struct {
 	publicKey, privateKey string
@@ -51,7 +52,7 @@ type announcementTemplate struct {
 
 var announcementTemplates = []announcementTemplate{
 	{"war-zero", "Guerra · 0 ataques", "⚔️ Guerra · primeiro ataque", "Está com 0 ataques? Faça seu primeiro ataque na guerra e siga a orientação da liderança."},
-	{"war-second", "Guerra · 1 de 2 ataques", "⚔️ Guerra · segundo ataque liberado", "Já fez 1 de 2 ataques? Passaram 12 horas: use o segundo ataque em qualquer alvo!"},
+	{"war-second", "Guerra · 1 de 2 ataques", "⚔️ Guerra · segundo ataque liberado", fmt.Sprintf("Já fez 1 de 2 ataques? Passaram %d horas: use o segundo ataque em qualquer alvo!", secondWarAttackHours)},
 	{"raids", "Raids do fim de semana", "🏰 Raids do fim de semana", "Não se esqueça dos ataques nas raids do fim de semana!"},
 	{"games", "Jogos do clã", "🎯 Jogos do clã", "Não se esqueça de fazer seus pontos nos jogos do clã!"},
 	{"cwl", "Liga de Guerra · CWL", "🏆 CWL · um ataque por rodada", "Está escalado na CWL? Não se esqueça do seu único ataque nesta rodada!"},
@@ -409,6 +410,7 @@ func (a *app) announcementStatus(w http.ResponseWriter, r *http.Request) {
 	status["cooldowns"] = cooldowns
 	status["items"] = items
 	status["serverTime"] = time.Now().Unix()
+	status["secondWarAttackHours"] = secondWarAttackHours
 	status["customConfigured"] = a.customVault != nil && a.customVault.configured
 	status["timerConfigured"] = a.timerVault != nil && a.timerVault.configured
 	jsonResponse(w, 200, status)
@@ -447,8 +449,9 @@ func (a *app) warReminderReady(ctx context.Context, clanID string, second bool, 
 	if err != nil || endErr != nil || now.Before(start) || !now.Before(end) {
 		return fmt.Errorf("O horário desta guerra não pôde ser confirmado.")
 	}
-	if second && now.Before(start.Add(12*time.Hour)) {
-		return fmt.Errorf("O segundo ataque será liberado em %s, após 12 horas de guerra.", start.Add(12*time.Hour).In(time.FixedZone("Brasília", -3*3600)).Format("02/01 às 15:04"))
+	release := start.Add(secondWarAttackHours * time.Hour)
+	if second && now.Before(release) {
+		return fmt.Errorf("O segundo ataque será liberado em %s, após %d horas de guerra.", release.In(time.FixedZone("Brasília", -3*3600)).Format("02/01 às 15:04"), secondWarAttackHours)
 	}
 	return nil
 }

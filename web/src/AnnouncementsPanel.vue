@@ -20,7 +20,7 @@ function warBlock(kind){
  if(props.warLoading)return 'Conferindo guerra…'
  const start=warDate(props.war?.startTime),end=warDate(props.war?.endTime)
  if(props.war?.state!=='inWar'||props.war?.attacksPerMember!==2||!Number.isFinite(start)||!Number.isFinite(end)||now.value+offset.value<start||now.value+offset.value>=end)return 'Aguarde uma guerra com 2 ataques em andamento.'
- if(kind==='war-second'&&now.value+offset.value<start+12*3600000)return 'Liberado após 12 horas de guerra.'
+ if(kind==='war-second'&&now.value+offset.value<start+data.value.secondWarAttackHours*3600000)return `Liberado após ${data.value.secondWarAttackHours} horas de guerra.`
  return ''
 }
 async function load(silent=false){
@@ -99,7 +99,7 @@ onUnmounted(()=>{document.removeEventListener('visibilitychange',lockAccess);win
   </section>
   <template v-if="clanAccess">
    <p v-if="!data.subscribers" class="notice">Nenhum celular inscrito neste clã. Compartilhe o link de instalação ou ative os avisos neste navegador.</p>
-   <section class="timer-access custom-announcement"><div class="section"><div><small>ACESSO PROTEGIDO</small><h2>Liberar intervalo</h2><p>Use a senha de liberação para antecipar um botão. Isso não envia um aviso e mantém a regra das 12 horas de guerra.</p></div><button v-if="timerVault.unlocked.value" class="secondary" @click="timerVault.lock()">Bloquear liberação</button></div>
+   <section class="timer-access custom-announcement"><div class="section"><div><small>ACESSO PROTEGIDO</small><h2>Liberar intervalo</h2><p>Use a senha de liberação para antecipar um botão. O aviso do segundo ataque continua disponível após {{ data.secondWarAttackHours }} horas de guerra.</p></div><button v-if="timerVault.unlocked.value" class="secondary" @click="timerVault.lock()">Bloquear liberação</button></div>
     <p v-if="!data.timerConfigured" class="notice">A senha de liberação do intervalo ainda não foi configurada.</p>
     <form v-else-if="!timerVault.unlocked.value" @submit.prevent="timerVault.unlock"><label>Senha de liberação do intervalo<input v-model="timerVault.password.value" type="password" autocomplete="off" required :disabled="timerVault.busy.value"></label><button class="secondary" :disabled="timerVault.busy.value">{{ timerVault.busy.value?'Desbloqueando…':'Desbloquear liberação' }}</button></form>
     <p v-else class="notice">Liberação disponível por dez minutos. Use “Liberar agora” no botão desejado. Ao ocultar o painel, este acesso bloqueia.</p><p v-if="timerVault.error.value" role="alert">{{ timerVault.error.value }}</p>
