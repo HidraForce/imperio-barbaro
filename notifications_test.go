@@ -339,24 +339,24 @@ func TestPushDeliveryRetriesExpiredSubscriptionsAndRestart(t *testing.T) {
 	}
 }
 
-func TestSecondWarAttackOnlyAfterFifteenHours(t *testing.T) {
+func TestSecondWarAttackOnlyAfterTwelveHours(t *testing.T) {
 	a, _ := notificationTestApp(t)
 	a.token = "test-token"
-	now := time.Now().UTC().Truncate(time.Second)
-	start := now.Add(-15*time.Hour + time.Second)
+	now := time.Now().UTC()
+	start := now.Add(-11 * time.Hour)
 	state := "inWar"
 	a.clash = &http.Client{Transport: clashTransport(func(_ *http.Request) (*http.Response, error) {
-		body, _ := json.Marshal(map[string]any{"state": state, "attacksPerMember": 2, "startTime": start.Format("20060102T150405.000Z"), "endTime": start.Add(24 * time.Hour).Format("20060102T150405.000Z")})
+		body, _ := json.Marshal(map[string]any{"state": state, "attacksPerMember": 2, "startTime": start.Format("20060102T150405.000Z"), "endTime": now.Add(12 * time.Hour).Format("20060102T150405.000Z")})
 		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(string(body)))}, nil
 	})}
-	if err := a.warReminderReady(context.Background(), "1", true, now); err == nil || !strings.Contains(err.Error(), "15 horas") {
-		t.Fatal("second attack eligibility before 15h:", err)
+	if a.warReminderReady(context.Background(), "1", true, now) == nil {
+		t.Fatal("second attack released before 12h")
 	}
 	if err := a.warReminderReady(context.Background(), "1", false, now); err != nil {
 		t.Fatal("first attack incorrectly blocked", err)
 	}
 	a.cache = nil
-	start = now.Add(-15 * time.Hour)
+	start = now.Add(-12 * time.Hour)
 	if err := a.warReminderReady(context.Background(), "1", true, now); err != nil {
 		t.Fatal("second attack not released", err)
 	}
