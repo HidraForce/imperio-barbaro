@@ -9,7 +9,7 @@ import (
 
 const clanAnnouncementHeader = "X-Clan-Announcements-Session"
 
-func clanAnnouncementPasswordName(id string) string { return "CLAN" + id + "_ANNOUNCEMENTS_PASSWORD" }
+func clanAnnouncementPasswordName(id string) string { return "COMS_C" + id }
 
 func newClanAnnouncementVault(id, password string) *contactVault {
 	return newScopedVault(password, "clan-announcements-"+id, clanAnnouncementHeader, clanAnnouncementPasswordName(id))

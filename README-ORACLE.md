@@ -46,7 +46,7 @@ Para uma VM nova, clone o repositório e crie `.env.oracle` a partir de `deploy/
 | `CLAN_TAG1`, `CLAN_TAG2`, `CLAN_TAG3` | Tags dos clãs. O terceiro usa `2CJR2VL8R` por padrão. |
 | `APP_USERNAME`, `APP_PASSWORD` | Login do painel |
 | `CONTACTS_PASSWORD` | Senha separada dos contatos |
-| `CLAN1_ANNOUNCEMENTS_PASSWORD`, `CLAN2_ANNOUNCEMENTS_PASSWORD`, `CLAN3_ANNOUNCEMENTS_PASSWORD` | Senhas distintas para os comunicados de cada clã. Use pelo menos 16 caracteres e valores diferentes das outras senhas do aplicativo. |
+| `COMS_C1`, `COMS_C2`, `COMS_C3` | Senhas distintas para os comunicados de cada clã. Use pelo menos 16 caracteres e valores diferentes das outras senhas do aplicativo. |
 | `NOTIFICATIONS_PASSWORD` | Senha dos avisos personalizados, mínimo 16 caracteres, diferente de APP_PASSWORD |
 | `SUPER_NOTIFICATIONS_PASSWORD` | Senha para liberar antecipadamente o intervalo de uma hora, mínimo 16 caracteres, diferente de APP_PASSWORD |
 

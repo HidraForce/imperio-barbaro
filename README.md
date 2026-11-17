@@ -21,7 +21,7 @@ Preencha `.env` antes de iniciar e abra http://localhost:2025.
 | `CLAN_TAG1`, `CLAN_TAG2`, `CLAN_TAG3` | Tags dos clãs. Sem `CLAN_TAG3`, o padrão é `2CJR2VL8R`. Um valor vazio desativa as consultas à API para aquele clã. |
 | `APP_USERNAME`, `APP_PASSWORD` | Login compartilhado dos líderes; senha privada com pelo menos 16 caracteres |
 | `CONTACTS_PASSWORD` | Senha dos contatos, diferente da principal e com pelo menos 16 caracteres |
-| `CLAN1_ANNOUNCEMENTS_PASSWORD`, `CLAN2_ANNOUNCEMENTS_PASSWORD`, `CLAN3_ANNOUNCEMENTS_PASSWORD` | Senha de comunicados de cada clã. Use pelo menos 16 caracteres e um valor diferente para cada clã e das outras senhas do aplicativo. |
+| `COMS_C1`, `COMS_C2`, `COMS_C3` | Senha de comunicados de cada clã. Use pelo menos 16 caracteres e um valor diferente para cada clã e das outras senhas do aplicativo. |
 | `NOTIFICATIONS_PASSWORD` | Senha exclusiva dos avisos personalizados, mínimo 16 caracteres e diferente de APP_PASSWORD. Sem ela, os avisos personalizados ficam bloqueados |
 | `SUPER_NOTIFICATIONS_PASSWORD` | Senha para liberar um intervalo antes de uma hora, mínimo 16 caracteres e diferente de APP_PASSWORD. Sem ela, a liberação fica bloqueada |
 | `PORT` | Porta do servidor; padrão `2025` |
