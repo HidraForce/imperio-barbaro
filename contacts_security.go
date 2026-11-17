@@ -7,6 +7,7 @@ import (
 	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -16,6 +17,23 @@ import (
 )
 
 const contactSessionTTL = 10 * time.Minute
+
+func validateDedicatedPasswords(passwords map[string]string, otherPasswords ...string) error {
+	used := make(map[string]bool)
+	for _, password := range otherPasswords {
+		used[password] = true
+	}
+	for name, password := range passwords {
+		if password == "" {
+			continue
+		}
+		if !validCredentials("protegido", password) || used[password] {
+			return fmt.Errorf("%s deve ter pelo menos 16 caracteres e ser diferente das outras senhas do aplicativo", name)
+		}
+		used[password] = true
+	}
+	return nil
+}
 
 type contactVault struct {
 	store                  *database

@@ -13,6 +13,7 @@ import { contactPhoneIndex, contactCoverageLabel } from './contact-numbers.js'
 import PendingMessage from './PendingMessage.vue'
 import LeadershipPanel from './LeadershipPanel.vue'
 import RulesPanel from './RulesPanel.vue'
+import ProtectedEditor from './ProtectedEditor.vue'
 import AnnouncementsPanel from './AnnouncementsPanel.vue'
 import ModerationRules from './ModerationRules.vue'
 import { sortMembers } from './member-sort.js'
@@ -292,8 +293,12 @@ onUnmounted(()=>{clearInterval(moderationTimer);document.removeEventListener('vi
     <template v-else-if="tab==='Announcements'"><AnnouncementsPanel :key="selectedClan" :clan-id="selectedClan" :war="war" :war-loading="loading"/></template>
     <template v-else-if="tab==='Contacts'"><ContactsPanel :configured="config.contactsConfigured" :loading="loading" :clans="config.clans" :members="members" :selected-clan="selectedClan"/></template>
     <ModerationPanel v-if="tab==='Moderation'" :key="selectedClan" :clan-id="selectedClan" :clan-name="clan?.name||('Clã '+selectedClan)" :members="currentRoster" :phones="messagePhones" @changed="if($event.clanId===selectedClan){moderationRecords=$event.items;moderationError=''}"/>
-    <KeepAlive><RulesPanel v-if="tab==='Rules'" :clans="config.clans"/></KeepAlive>
-    <KeepAlive><LeadershipPanel v-if="tab==='Leadership' && config.clans.length" :clans="config.clans"/></KeepAlive>
+    <KeepAlive>
+      <ProtectedEditor v-if="tab==='Rules'" area="rules" title="Editar regras" :editor="RulesPanel" :clans="config.clans"/>
+    </KeepAlive>
+    <KeepAlive>
+      <ProtectedEditor v-if="tab==='Leadership' && config.clans.length" area="leadership" title="Editar liderança" :editor="LeadershipPanel" :clans="config.clans"/>
+    </KeepAlive>
     <PendingMessage :war-mode="tab==='War'" v-if="['Overview','Raids','CWL','War'].includes(tab)" :clan-name="clan?.name||('Clã '+selectedClan)" :clan-tag="activeClanTag" :items="messageItems" :busy="messageBusy" :context="messageContext" :phones="messagePhones"/>
     <footer>IMPÉRIO BÁRBARO CRM &nbsp;·&nbsp; CONTROLE DE ATAQUES &nbsp;·&nbsp; {{ new Date().getFullYear() }}</footer>
   </div></main><nav class="mobile-nav"><button v-for="item in tabs" :key="item" :class="{active:tab===item}" @click="tab=item"><UiIcon :name="item"/><small>{{ tabLabels[item] }}</small></button></nav>

@@ -147,3 +147,11 @@ test('Leitura pública de liderança não encaminha credenciais e nunca permite 
  assert.equal(headers.get('x-clan-announcements-session'),'clan')
  assert.equal(headers.get('x-super-notifications-session'),'timer')
 })
+
+test('Editor requests forward the scoped session to the dashboard API',async()=>{
+ let headers
+ const handler=createGateway({apiBase:'https://api.internal',fetcher:async(url,options)=>{headers=options.headers;return new Response('{}')}})
+ const response=await invoke(handler,'/api/rules',{'x-clanboard-request':'1','x-editor-session':'rules-token'},'PUT','{}')
+ assert.equal(response.code,200)
+ assert.equal(headers.get('x-editor-session'),'rules-token')
+})

@@ -22,6 +22,7 @@ Preencha `.env` antes de iniciar e abra http://localhost:2025.
 | `APP_USERNAME`, `APP_PASSWORD` | Login compartilhado dos líderes; senha privada com pelo menos 16 caracteres |
 | `CONTACTS_PASSWORD` | Senha dos contatos, diferente da principal e com pelo menos 16 caracteres |
 | `COMS_C1`, `COMS_C2`, `COMS_C3` | Senha de comunicados de cada clã. Use pelo menos 16 caracteres e um valor diferente para cada clã e das outras senhas do aplicativo. |
+| `LEADERSHIP`, `RULES_PASS` | Senhas dos editores de liderança e regras, respectivamente. Use pelo menos 16 caracteres e valores diferentes das outras senhas do aplicativo. |
 | `NOTIFICATIONS_PASSWORD` | Senha exclusiva dos avisos personalizados, mínimo 16 caracteres e diferente de APP_PASSWORD. Sem ela, os avisos personalizados ficam bloqueados |
 | `SUPER_NOTIFICATIONS_PASSWORD` | Senha para liberar um intervalo antes de uma hora, mínimo 16 caracteres e diferente de APP_PASSWORD. Sem ela, a liberação fica bloqueada |
 | `PORT` | Porta do servidor; padrão `2025` |
@@ -90,7 +91,7 @@ Os testes de PostgreSQL usam `TEST_DATABASE_URL`; o workflow de CI já fornece u
 
 ## Regras, avisos e punições
 
-Em **Regras**, edite textos, tópicos, resumos dos clãs e links HTTPS dos regulamentos. Salvar publica diretamente no site; os PDFs antigos foram removidos. Links de tópicos existentes continuam funcionando, exceto se o tópico for removido.
+Desbloqueie **Liderança** ou **Regras** com a senha da respectiva aba. A sessão de edição expira em dez minutos e bloqueia ao trocar de aba. Em **Regras**, edite textos, tópicos, resumos dos clãs e links HTTPS dos regulamentos. Salvar publica diretamente no site. Cada tópico mantém seu link até ser removido.
 
 Em **Avisos e punições**, registre ocorrências manualmente, informe justificativas e remova entradas das listas. Os avisos têm quatro setores: Jogos, Capital, Guerras e Replays. O grau é calculado pelos avisos ativos: grau 1 = advertência; grau 2 = fora de duas guerras ou perda de cargo; grau 3 = reincidência; grau 4 = expulsão, somente ao acumular quatro avisos no mesmo setor ou ao menos um em cada um dos quatro setores. Avisos de setores diferentes se somam, mas quatro avisos distribuídos em apenas dois ou três setores não autorizam expulsão. A API valida os requisitos ao registrar uma punição ativa; a liderança escolhe e executa a medida no jogo. O resumo também aparece em **Visão geral**.
 

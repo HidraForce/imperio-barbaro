@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -13,24 +12,6 @@ func clanAnnouncementPasswordName(id string) string { return "COMS_C" + id }
 
 func newClanAnnouncementVault(id, password string) *contactVault {
 	return newScopedVault(password, "clan-announcements-"+id, clanAnnouncementHeader, clanAnnouncementPasswordName(id))
-}
-
-func validateClanAnnouncementPasswords(passwords map[string]string, otherPasswords ...string) error {
-	used := make(map[string]bool)
-	for _, password := range otherPasswords {
-		used[password] = true
-	}
-	for _, clan := range communityClans {
-		password := passwords[clan.ID]
-		if password == "" {
-			continue
-		}
-		if !validCredentials("avisos", password) || used[password] {
-			return fmt.Errorf("%s deve ter pelo menos 16 caracteres e ser diferente das outras senhas do aplicativo", clanAnnouncementPasswordName(clan.ID))
-		}
-		used[password] = true
-	}
-	return nil
 }
 
 func (a *app) initAnnouncementAccess(customPassword, timerPassword string, clanPasswords map[string]string) error {

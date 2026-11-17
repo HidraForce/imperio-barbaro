@@ -70,7 +70,7 @@ export function createGateway({apiBase,dist=resolve('dist'),fetcher=fetch}){
   const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),90000)
   req.once('aborted',()=>controller.abort());res.once('close',()=>{if(!res.writableEnded)controller.abort()})
   const headers=new Headers()
-  for(const name of ['authorization','content-type','x-clanboard-request','x-contacts-session','x-clan-announcements-session','x-notifications-session','x-super-notifications-session']){if(req.headers[name])headers.set(name,req.headers[name])}
+  for(const name of ['authorization','content-type','x-clanboard-request','x-contacts-session','x-clan-announcements-session','x-notifications-session','x-super-notifications-session','x-editor-session']){if(req.headers[name])headers.set(name,req.headers[name])}
   try{
    // Origin é conferida no serviço público. A chamada seguinte é interna e
    // usa o Host do binding; cabeçalhos encaminhados do visitante não são confiados.

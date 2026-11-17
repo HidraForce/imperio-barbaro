@@ -203,14 +203,14 @@ func TestAnnouncementPasswordIsBoundToTargetClan(t *testing.T) {
 
 func TestClanAnnouncementPasswordsMustBeDistinct(t *testing.T) {
 	passwords := testClanAnnouncementPasswords()
-	if err := validateClanAnnouncementPasswords(passwords, "private-dashboard-password"); err != nil {
+	if err := validateDedicatedPasswords(passwords, "private-dashboard-password"); err != nil {
 		t.Fatal(err)
 	}
-	if err := validateClanAnnouncementPasswords(passwords, passwords["3"]); err == nil {
+	if err := validateDedicatedPasswords(passwords, passwords["3"]); err == nil {
 		t.Fatal("a clan reused a password from another part of the dashboard")
 	}
 	passwords["3"] = passwords["2"]
-	if err := validateClanAnnouncementPasswords(passwords); err == nil {
+	if err := validateDedicatedPasswords(passwords); err == nil {
 		t.Fatal("two clans used the same password")
 	}
 }

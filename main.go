@@ -63,10 +63,15 @@ func main() {
 		}
 	}
 	clanPasswords := make(map[string]string, len(communityClans))
+	leadershipPassword, rulesPassword := os.Getenv("LEADERSHIP"), os.Getenv("RULES_PASS")
+	dedicatedPasswords := map[string]string{"LEADERSHIP": leadershipPassword, "RULES_PASS": rulesPassword}
 	for _, clan := range communityClans {
-		clanPasswords[clan.ID] = os.Getenv(clanAnnouncementPasswordName(clan.ID))
+		name := clanAnnouncementPasswordName(clan.ID)
+		secret := os.Getenv(name)
+		clanPasswords[clan.ID] = secret
+		dedicatedPasswords[name] = secret
 	}
-	if err := validateClanAnnouncementPasswords(clanPasswords, password, contactsPassword, customPassword, timerPassword); err != nil {
+	if err := validateDedicatedPasswords(dedicatedPasswords, password, contactsPassword, customPassword, timerPassword); err != nil {
 		log.Fatal(err)
 	}
 	db, err := openDatabase()
@@ -141,10 +146,9 @@ func main() {
 		jsonResponse(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 	r.Get("/api/config", a.config)
-	r.Get("/api/leadership", a.leadership)
-	r.Put("/api/leadership", a.saveLeadership)
-	r.Get("/api/rules", a.rules)
-	r.Put("/api/rules", a.saveRules)
+	if err := a.editorAccessRoutes(r, leadershipPassword, rulesPassword); err != nil {
+		log.Fatal(err)
+	}
 	r.Get("/api/moderation", a.moderation)
 	r.Post("/api/moderation", a.saveModeration)
 	r.Put("/api/moderation/{id}", a.saveModeration)

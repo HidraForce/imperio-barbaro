@@ -2,9 +2,12 @@ import { ref } from 'vue'
 import { adminAPI } from './admin-api.js'
 
 export function createAnnouncementVault(scope, header, api = adminAPI) {
+  return createScopedVault('/api/announcements/' + scope, header, api)
+}
+
+export function createScopedVault(path, header, api = adminAPI) {
   const password = ref(''), unlocked = ref(false), busy = ref(false), error = ref('')
   let token = '', generation = 0, timer
-  const path = '/api/announcements/' + scope
   function revoke(session) {
     if (session) void api(path + '/session', { method: 'DELETE', keepalive: true, headers: { [header]: session } }).catch(() => {})
   }

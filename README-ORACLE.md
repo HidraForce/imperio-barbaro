@@ -47,6 +47,7 @@ Para uma VM nova, clone o repositório e crie `.env.oracle` a partir de `deploy/
 | `APP_USERNAME`, `APP_PASSWORD` | Login do painel |
 | `CONTACTS_PASSWORD` | Senha separada dos contatos |
 | `COMS_C1`, `COMS_C2`, `COMS_C3` | Senhas distintas para os comunicados de cada clã. Use pelo menos 16 caracteres e valores diferentes das outras senhas do aplicativo. |
+| `LEADERSHIP`, `RULES_PASS` | Senhas distintas para editar a liderança e as regras. Use pelo menos 16 caracteres e valores diferentes das outras senhas do aplicativo. |
 | `NOTIFICATIONS_PASSWORD` | Senha dos avisos personalizados, mínimo 16 caracteres, diferente de APP_PASSWORD |
 | `SUPER_NOTIFICATIONS_PASSWORD` | Senha para liberar antecipadamente o intervalo de uma hora, mínimo 16 caracteres, diferente de APP_PASSWORD |
 
@@ -58,7 +59,7 @@ bash scripts/oracle-compose.sh up -d --build
 bash scripts/oracle-compose.sh ps
 ```
 
-Configure as senhas dos três clãs no `.env.oracle` privado da VM para liberar os comunicados. Uma senha vazia mantém o acesso correspondente bloqueado. Para alterar apenas as variáveis após um deploy, recrie o serviço com `docker compose --env-file .env.oracle -f compose.oracle.yml up -d --no-deps clanboard`.
+Configure as senhas dos três clãs e dos dois editores no `.env.oracle` privado da VM. Uma senha vazia mantém a área de gestão correspondente bloqueada. Para alterar apenas as variáveis após um deploy, recrie o serviço com `docker compose --env-file .env.oracle -f compose.oracle.yml up -d --no-deps clanboard`.
 
 O site deve abrir sem login; o painel deve pedir as credenciais existentes. Confira os clãs, o desbloqueio dos contatos e os dados após reiniciar o serviço.
 
