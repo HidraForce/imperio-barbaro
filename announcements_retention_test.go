@@ -107,12 +107,13 @@ func TestAnnouncementRetentionResumesOnStartupWithoutInterruptingLeases(t *testi
 
 func TestPublishingEleventhAnnouncementDeletesOldestCompletedRecord(t *testing.T) {
 	a, handler := notificationTestApp(t)
+	token := testClanAnnouncementToken(t, a, "1")
 	enrollPush(t, handler, "1")
 	now := time.Now().Unix()
 	for i := 0; i < 10; i++ {
 		seedAnnouncementHistory(t, a.db, fmt.Sprintf("previous-%02d", i), "1", now-100+int64(i), "accepted", 0)
 	}
-	res := adminTestRequest(handler, "POST", "https://dashboard.imperiobarbaro.com.br/api/announcements", map[string]string{"clanId": "1", "kind": "raids"}, true)
+	res := announcementTestRequest(handler, "/api/announcements", token, map[string]string{"clanId": "1", "kind": "raids"})
 	if res.Code != 202 {
 		t.Fatalf("publish failed: %d %s", res.Code, res.Body.String())
 	}
@@ -122,7 +123,7 @@ func TestPublishingEleventhAnnouncementDeletesOldestCompletedRecord(t *testing.T
 	if pushCount(t, a, `SELECT COUNT(*) FROM announcements WHERE id='previous-00'`) != 0 || pushCount(t, a, `SELECT COUNT(*) FROM push_jobs WHERE state='pending'`) != 1 {
 		t.Fatal("publishing deleted the wrong message or its pending delivery")
 	}
-	if res = adminTestRequest(handler, "POST", "https://dashboard.imperiobarbaro.com.br/api/announcements", map[string]string{"clanId": "1", "kind": "raids"}, true); res.Code != 429 {
+	if res = announcementTestRequest(handler, "/api/announcements", token, map[string]string{"clanId": "1", "kind": "raids"}); res.Code != 429 {
 		t.Fatal("trimming history bypassed the one-hour cooldown")
 	}
 }

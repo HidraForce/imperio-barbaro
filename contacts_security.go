@@ -7,6 +7,7 @@ import (
 	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -16,6 +17,23 @@ import (
 )
 
 const contactSessionTTL = 10 * time.Minute
+
+func validateDedicatedPasswords(passwords map[string]string, otherPasswords ...string) error {
+	used := make(map[string]bool)
+	for _, password := range otherPasswords {
+		used[password] = true
+	}
+	for name, password := range passwords {
+		if password == "" {
+			continue
+		}
+		if !validCredentials("protegido", password) || used[password] {
+			return fmt.Errorf("%s deve ter pelo menos 16 caracteres e ser diferente das outras senhas do aplicativo", name)
+		}
+		used[password] = true
+	}
+	return nil
+}
 
 type contactVault struct {
 	store                  *database
@@ -140,28 +158,33 @@ func (v *contactVault) unlock(w http.ResponseWriter, r *http.Request) {
 
 func (v *contactVault) protect(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Cache-Control", "no-store")
-		if !v.configured {
-			securityError(w, 503, "Acesso bloqueado. Configure "+v.envName+" no servidor.")
-			return
+		if v.authorize(w, r) {
+			next.ServeHTTP(w, r)
 		}
-		if v.store != nil {
-			v.protectShared(w, r, next)
-			return
-		}
-		token := r.Header.Get(v.header)
-		key := sha256.Sum256([]byte(token))
-		v.mu.Lock()
-		now := v.now()
-		v.prune(now)
-		expires, ok := v.sessions[key]
-		v.mu.Unlock()
-		if len(token) != 43 || !ok || !now.Before(expires) {
-			securityError(w, 423, "Acesso bloqueado. Informe a senha exclusiva para continuar.")
-			return
-		}
-		next.ServeHTTP(w, r)
 	})
+}
+
+func (v *contactVault) authorize(w http.ResponseWriter, r *http.Request) bool {
+	w.Header().Set("Cache-Control", "no-store")
+	if !v.configured {
+		securityError(w, 503, "Acesso bloqueado. Configure "+v.envName+" no servidor.")
+		return false
+	}
+	if v.store != nil {
+		return v.authorizeShared(w, r)
+	}
+	token := r.Header.Get(v.header)
+	key := sha256.Sum256([]byte(token))
+	v.mu.Lock()
+	now := v.now()
+	v.prune(now)
+	expires, ok := v.sessions[key]
+	v.mu.Unlock()
+	if len(token) != 43 || !ok || !now.Before(expires) {
+		securityError(w, 423, "Acesso bloqueado. Informe a senha exclusiva para continuar.")
+		return false
+	}
+	return true
 }
 
 func (v *contactVault) lock(w http.ResponseWriter, r *http.Request) {

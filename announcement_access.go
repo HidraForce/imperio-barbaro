@@ -6,9 +6,28 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-func (a *app) initAnnouncementAccess(customPassword, timerPassword string) error {
+const clanAnnouncementHeader = "X-Clan-Announcements-Session"
+
+func clanAnnouncementPasswordName(id string) string { return "COMS_C" + id }
+
+func newClanAnnouncementVault(id, password string) *contactVault {
+	return newScopedVault(password, "clan-announcements-"+id, clanAnnouncementHeader, clanAnnouncementPasswordName(id))
+}
+
+func (a *app) initAnnouncementAccess(customPassword, timerPassword string, clanPasswords map[string]string) error {
 	a.customVault = newScopedVault(customPassword, "notifications", "X-Notifications-Session", "NOTIFICATIONS_PASSWORD")
 	a.timerVault = newScopedVault(timerPassword, "super-notifications", "X-Super-Notifications-Session", "SUPER_NOTIFICATIONS_PASSWORD")
+	a.clanAnnouncementVaults = make(map[string]*contactVault, len(communityClans))
+	for _, clan := range communityClans {
+		password := clanPasswords[clan.ID]
+		vault := newClanAnnouncementVault(clan.ID, password)
+		if a.db.postgres && vault.configured {
+			if err := vault.useSharedStore(a.db, password); err != nil {
+				return err
+			}
+		}
+		a.clanAnnouncementVaults[clan.ID] = vault
+	}
 	if a.db.postgres {
 		if err := a.customVault.useSharedStore(a.db, customPassword); err != nil {
 			return err
@@ -21,12 +40,30 @@ func (a *app) initAnnouncementAccess(customPassword, timerPassword string) error
 }
 
 func (a *app) announcementAccessRoutes(r chi.Router) {
+	r.Get("/api/announcements", a.announcementStatus)
+	r.Get("/api/announcements/audience", a.announcementAudience)
+	r.Post("/api/announcements", a.sendAnnouncement)
+	for _, clan := range communityClans {
+		vault := a.clanAnnouncementVaults[clan.ID]
+		path := "/api/announcements/clans/" + clan.ID
+		r.Post(path+"/unlock", vault.unlock)
+		r.Delete(path+"/session", vault.lock)
+	}
 	r.Post("/api/announcements/custom/unlock", a.customVault.unlock)
 	r.Delete("/api/announcements/custom/session", a.customVault.lock)
 	r.With(a.customVault.protect).Post("/api/announcements/custom", a.sendAnnouncement)
 	r.Post("/api/announcements/timer/unlock", a.timerVault.unlock)
 	r.Delete("/api/announcements/timer/session", a.timerVault.lock)
 	r.With(a.timerVault.protect).Post("/api/announcements/timer/reset", a.resetAnnouncementTimer)
+}
+
+func (a *app) authorizeClanAnnouncement(w http.ResponseWriter, r *http.Request, id string) bool {
+	vault := a.clanAnnouncementVaults[id]
+	if vault == nil {
+		securityError(w, 503, "A senha de comunicados deste clã ainda não foi configurada.")
+		return false
+	}
+	return vault.authorize(w, r)
 }
 
 // Releasing a single button never sends a message or bypasses the war rules.
@@ -45,6 +82,9 @@ func (a *app) resetAnnouncementTimer(w http.ResponseWriter, r *http.Request) {
 	}
 	if _, valid := findCommunityClan(input.ClanID); !valid || !validKind {
 		securityError(w, 400, "Escolha o clã e um dos avisos disponíveis.")
+		return
+	}
+	if !a.authorizeClanAnnouncement(w, r, input.ClanID) {
 		return
 	}
 	if _, err := a.db.ExecContext(r.Context(), `UPDATE announcement_cooldowns SET next_at=0 WHERE clan_id=? AND kind=?`, input.ClanID, input.Kind); err != nil {

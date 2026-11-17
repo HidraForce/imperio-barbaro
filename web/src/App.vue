@@ -13,6 +13,7 @@ import { contactPhoneIndex, contactCoverageLabel } from './contact-numbers.js'
 import PendingMessage from './PendingMessage.vue'
 import LeadershipPanel from './LeadershipPanel.vue'
 import RulesPanel from './RulesPanel.vue'
+import ProtectedEditor from './ProtectedEditor.vue'
 import AnnouncementsPanel from './AnnouncementsPanel.vue'
 import ModerationRules from './ModerationRules.vue'
 import { sortMembers } from './member-sort.js'
@@ -92,6 +93,7 @@ const members=computed(()=>clan.value?.memberList||[]), warMembers=computed(()=>
 const rosterSort=ref('trophies-desc')
 const sortedMembers=computed(()=>{const [field,direction]=rosterSort.value.split('-');return sortMembers(members.value,field,direction)})
 const activeClanTag=computed(()=>config.value.clans?.find(c=>c.id===selectedClan.value)?.tag||'')
+const appAudience=ref(null)
 const warState=computed(()=>!war.value?'Indisponível':war.value.state==='notInWar'?'Fora de guerra':war.value.state==='warEnded'?'Guerra encerrada':war.value.state==='preparation'?'Preparação':'Em andamento')
 const raidRecord=computed(()=>raidRecords.value.find(r=>r.season.startTime===selectedWeekend.value)||null)
 const raid=computed(()=>raidRecord.value?.season||null)
@@ -128,7 +130,9 @@ async function load(){
  if(loading.value&&config.value.clans.length)return
  leagueRequest++;roundRequest++;allRoundsRequest++;allRounds.value=[];allRoundsLoading.value=false;leagueView.value='round';leagueGroup.value=null;leagueWar.value=null;leagueLoading.value=false;leagueWarLoading.value=false;leagueError.value='';leagueMessage.value='';roundError.value='';roundMessage.value='';loading.value=true;error.value='';warError.value='';raidError.value='';clan.value=null;war.value=null;raidRecords.value=[]
  try{
-  config.value=await api('/api/config')
+  const [settings,audience]=await Promise.all([api('/api/config'),api('/api/announcements/audience').catch(()=>null)])
+  config.value=settings
+  appAudience.value=audience
   if(contactVault.unlocked.value)await contactVault.refresh()
   if(!config.value.clans?.some(c=>c.id===selectedClan.value&&c.configured))selectedClan.value=config.value.clans?.find(c=>c.configured)?.id||'1'
   const suffix='?clan='+selectedClan.value
@@ -197,6 +201,14 @@ onUnmounted(()=>{clearInterval(moderationTimer);document.removeEventListener('vi
     <div v-if="error" class="notice error">{{ error }} <button @click="error=''">×</button></div><div v-if="!config.configured&&!['Leadership','Rules'].includes(tab)" class="notice">⌁ &nbsp; Configure <code>CLASH_API_TOKEN</code> e confira as tags dos clãs no .env. Depois, reinicie o aplicativo.</div><p v-if="loading" class="loading">Carregando dados do clã…</p>
     <ContactMessageAccess v-if="config.contactsConfigured && !loading && ['Overview','War','Raids','CWL','Moderation'].includes(tab)" v-model="includeNumbers"/>
     <template v-if="tab==='Overview'">
+      <section v-if="!loading" aria-labelledby="app-audience-title">
+        <div class="section"><h2 id="app-audience-title">App de membros · comunidade</h2></div>
+        <div v-if="appAudience" class="stats app-audience-stats">
+          <article><small>APPS INSTALADOS</small><strong>{{ number(appAudience.installed) }}</strong><span>Instalações confirmadas com avisos ativos</span></article>
+          <article><small>INSCRIÇÕES ATIVAS</small><strong>{{ number(appAudience.subscribers) }}</strong><span>App e navegador, sem duplicar inscrições entre clãs</span></article>
+        </div>
+        <p v-else class="report-note">Contagem do app indisponível. Sincronize para tentar novamente.</p>
+      </section>
       <ContactCoverage v-if="!loading" :clans="config.clans" :members="clan?.memberList" :selected-clan="selectedClan" @coverage="phoneCoverage=$event"/>
       <section class="discipline-overview" aria-labelledby="discipline-title">
         <div class="section"><h2 id="discipline-title">Avisos e punições</h2><button class="secondary" @click="tab='Moderation'">Gerenciar listas</button></div>
@@ -278,13 +290,21 @@ onUnmounted(()=>{clearInterval(moderationTimer);document.removeEventListener('vi
     </template>
     <template v-else-if="tab==='War'"><div v-if="warError" class="notice">{{ warError }}</div><div class="stats three"><article><small>SUAS ESTRELAS</small><strong>{{ war?.clan?.stars??'—' }}</strong><span>{{ war?.clan?.attacks||0 }} ataques usados</span></article><article><small>ESTRELAS DO ADVERSÁRIO</small><strong>{{ war?.opponent?.stars??'—' }}</strong><span>{{ war?.opponent?.attacks||0 }} ataques usados</span></article><article><small>SITUAÇÃO DA GUERRA</small><strong class="small-strong">{{ warState }}</strong><span>{{ war?.teamSize||0 }} participantes</span></article></div><div class="section"><div><small>ACOMPANHAMENTO DE ATAQUES</small><h2>Ataques de guerra</h2></div><button class="secondary" :disabled="loading||!!warError||!warMembers.length" @click="downloadBattle('Guerra')">↓ Exportar CSV</button></div><section class="table-wrap"><table><thead><tr><th>JOGADOR</th><th>ATAQUES</th><th>ESTRELAS</th><th>DESTRUIÇÃO</th><th>ALVO</th></tr></thead><tbody><tr v-for="m in warMembers" :key="m.tag"><td><b>{{ m.name }}</b><small>{{ m.tag }}</small><span v-if="memberPresence(m.tag)===false" class="former-member-badge">Fora do clã atual</span></td><td>{{ m.attacks?.length||0 }} / {{ war?.attacksPerMember||2 }}</td><td class="stars">{{ '★'.repeat(stars(m)) }}</td><td>{{ percent(m) }}%</td><td>{{ m.attacks?.map(a=>a.defenderTag).join(', ')||'Não atacou' }}</td></tr><tr v-if="!warMembers.length"><td class="empty" colspan="5">Nenhum ataque de guerra ativo para exibir.</td></tr></tbody></table></section></template>
     <template v-else-if="tab==='Roster'"><div class="section"><div><small>TODOS OS MEMBROS</small><h2>Membros do clã <em>{{ members.length }}</em></h2></div><div class="roster-controls"><label>Ordenar por<select v-model="rosterSort"><option value="trophies-desc">Troféus · maior para menor</option><option value="trophies-asc">Troféus · menor para maior</option><option value="role-desc">Cargo · líder para membro</option><option value="role-asc">Cargo · membro para líder</option></select></label><button class="secondary" :disabled="loading || !members.length" @click="downloadCSV(membersCSV(sortedMembers, clan?.name), 'membros-'+activeClanTag+'.csv')">↓ Exportar CSV</button></div></div><p class="report-note">Novo = entrada ou retorno observado nos últimos 7 dias. O acompanhamento consulta o clã a cada 15 minutos. O primeiro registro é a referência inicial; a data exata de entrada não é confirmada.</p><section class="table-wrap"><table><thead><tr><th>JOGADOR</th><th :aria-sort="rosterSort.startsWith('role') ? (rosterSort.endsWith('desc') ? 'descending' : 'ascending') : 'none'">CARGO</th><th>NÍVEL</th><th :aria-sort="rosterSort.startsWith('trophies') ? (rosterSort.endsWith('desc') ? 'descending' : 'ascending') : 'none'">TROFÉUS</th><th>DOAÇÕES</th><th>ESTRELAS DE GUERRA</th></tr></thead><tbody><tr v-for="m in sortedMembers" :key="m.tag"><td><b>{{ m.name }}</b> <span v-if="m.membership?.newMember" class="badge">Novo</span><small>{{ m.tag }}</small><small :title="membershipLabel(m)">{{ m.membership?.detectedJoin ? 'Entrada/retorno observado em '+new Date(m.membership.firstSeen).toLocaleDateString('pt-BR') : 'Entrada desconhecida · referência inicial' }}</small></td><td>{{ roleLabel(m.role) }}</td><td>{{ m.expLevel }}</td><td>🏆 {{ m.trophies }}</td><td>{{ m.donations }}</td><td>{{ m.warStars }}</td></tr><tr v-if="!members.length"><td colspan="6" class="empty">Os membros aparecerão aqui quando a API estiver conectada.</td></tr></tbody></table></section></template>
-    <template v-else-if="tab==='Announcements'"><AnnouncementsPanel :clan-id="selectedClan" :war="war" :war-loading="loading"/></template>
+    <template v-else-if="tab==='Announcements'"><AnnouncementsPanel :key="selectedClan" :clan-id="selectedClan" :war="war" :war-loading="loading"/></template>
     <template v-else-if="tab==='Contacts'"><ContactsPanel :configured="config.contactsConfigured" :loading="loading" :clans="config.clans" :members="members" :selected-clan="selectedClan"/></template>
     <ModerationPanel v-if="tab==='Moderation'" :key="selectedClan" :clan-id="selectedClan" :clan-name="clan?.name||('Clã '+selectedClan)" :members="currentRoster" :phones="messagePhones" @changed="if($event.clanId===selectedClan){moderationRecords=$event.items;moderationError=''}"/>
-    <KeepAlive><RulesPanel v-if="tab==='Rules'" :clans="config.clans"/></KeepAlive>
-    <KeepAlive><LeadershipPanel v-if="tab==='Leadership' && config.clans.length" :clans="config.clans"/></KeepAlive>
+    <KeepAlive>
+      <ProtectedEditor v-if="tab==='Rules'" area="rules" title="Editar regras" :editor="RulesPanel" :clans="config.clans"/>
+    </KeepAlive>
+    <KeepAlive>
+      <ProtectedEditor v-if="tab==='Leadership' && config.clans.length" area="leadership" title="Editar liderança" :editor="LeadershipPanel" :clans="config.clans"/>
+    </KeepAlive>
     <PendingMessage :war-mode="tab==='War'" v-if="['Overview','Raids','CWL','War'].includes(tab)" :clan-name="clan?.name||('Clã '+selectedClan)" :clan-tag="activeClanTag" :items="messageItems" :busy="messageBusy" :context="messageContext" :phones="messagePhones"/>
     <footer>IMPÉRIO BÁRBARO CRM &nbsp;·&nbsp; CONTROLE DE ATAQUES &nbsp;·&nbsp; {{ new Date().getFullYear() }}</footer>
   </div></main><nav class="mobile-nav"><button v-for="item in tabs" :key="item" :class="{active:tab===item}" @click="tab=item"><UiIcon :name="item"/><small>{{ tabLabels[item] }}</small></button></nav>
 </div>
 </template>
+
+<style scoped>
+.stats.app-audience-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+</style>

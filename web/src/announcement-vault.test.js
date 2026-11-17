@@ -3,24 +3,27 @@ import assert from 'node:assert/strict'
 import { createAnnouncementVault } from './announcement-vault.js'
 import { adminAPI } from './admin-api.js'
 
-test('Custom and timer sessions have separate routes and headers without loading contacts', async () => {
+test('Clan sessions combine with the existing custom and timer sessions', async () => {
  const calls=[]
- const api=async(path,options)=>{calls.push({path,options});return {token:path.includes('/custom/')?'custom-token':'timer-token',expiresAt:new Date(Date.now()+60000).toISOString()}}
+ const api=async(path,options)=>{calls.push({path,options});return {token:path.split('/').at(-2)+'-token',expiresAt:new Date(Date.now()+60000).toISOString()}}
+ const clan=createAnnouncementVault('clans/3','X-Clan-Announcements-Session',api)
  const custom=createAnnouncementVault('custom','X-Notifications-Session',api)
  const timer=createAnnouncementVault('timer','X-Super-Notifications-Session',api)
  try {
   custom.password.value='custom-secret';await custom.unlock()
   assert.equal(custom.password.value,'')
   assert.equal(timer.unlocked.value,false)
+  await clan.unlock()
+  assert.equal(calls.at(-1).path,'/api/announcements/clans/3/unlock')
   timer.password.value='timer-secret';await timer.unlock()
-  await custom.request('/api/announcements/custom',{method:'POST'})
-  assert.deepEqual(calls.at(-1).options.headers,{'X-Notifications-Session':'custom-token'})
-  await timer.request('/api/announcements/timer/reset',{method:'POST'})
-  assert.deepEqual(calls.at(-1).options.headers,{'X-Super-Notifications-Session':'timer-token'})
+  await custom.request('/api/announcements/custom',{method:'POST'},clan.request)
+  assert.deepEqual(calls.at(-1).options.headers,{'X-Notifications-Session':'custom-token','X-Clan-Announcements-Session':'3-token'})
+  await timer.request('/api/announcements/timer/reset',{method:'POST'},clan.request)
+  assert.deepEqual(calls.at(-1).options.headers,{'X-Super-Notifications-Session':'timer-token','X-Clan-Announcements-Session':'3-token'})
   custom.lock()
   assert.equal(timer.unlocked.value,true)
   assert.ok(!calls.some(call=>call.path.startsWith('/api/contacts')))
- }finally{custom.lock();timer.lock()}
+ }finally{clan.lock();custom.lock();timer.lock()}
 })
 
 test('Hiding while an unlock is in flight revokes the late session',async()=>{

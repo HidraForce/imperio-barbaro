@@ -1,10 +1,9 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { adminAPI } from './admin-api.js'
 import RuleLines from './RuleLines.vue'
 import WhatsAppMessage from './WhatsAppMessage.vue'
 import { rulesMessage } from './rules-message.js'
-const props = defineProps({ clans: { type: Array, default: () => [] } })
+const props = defineProps({ clans: { type: Array, default: () => [] }, request: { type: Function, required: true } })
 const draft = ref(null), saved = ref(''), busy = ref(false), error = ref(''), feedback = ref(''), conflict = ref(false), confirmReload = ref(false)
 const messageClan=ref('all'),previousPublication=ref(null)
 const published=computed(()=>saved.value?JSON.parse(saved.value):null)
@@ -18,14 +17,14 @@ function accept(document) {
 }
 async function load() {
   busy.value = true; error.value = ''; feedback.value = ''
-  try { accept(await adminAPI('/api/rules'));previousPublication.value=null } catch (failure) { error.value = failure.message }
+  try { accept(await props.request('/api/rules'));previousPublication.value=null } catch (failure) { error.value = failure.message }
   finally { busy.value = false }
 }
 async function save() {
   busy.value = true; error.value = ''; feedback.value = ''
   try {
     const before=published.value
-    accept(await adminAPI('/api/rules', { method: 'PUT', body: JSON.stringify(draft.value) }))
+    accept(await props.request('/api/rules', { method: 'PUT', body: JSON.stringify(draft.value) }))
     previousPublication.value=before
     feedback.value = 'Regras publicadas. O site já mostra a nova versão ao abrir ou atualizar a página.'
   } catch (failure) { error.value = failure.message; conflict.value = failure.status === 409 }

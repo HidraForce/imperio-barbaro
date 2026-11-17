@@ -46,6 +46,8 @@ Para uma VM nova, clone o repositório e crie `.env.oracle` a partir de `deploy/
 | `CLAN_TAG1`, `CLAN_TAG2`, `CLAN_TAG3` | Tags dos clãs. O terceiro usa `2CJR2VL8R` por padrão. |
 | `APP_USERNAME`, `APP_PASSWORD` | Login do painel |
 | `CONTACTS_PASSWORD` | Senha separada dos contatos |
+| `COMS_C1`, `COMS_C2`, `COMS_C3` | Senhas distintas para os comunicados de cada clã. Use pelo menos 16 caracteres e valores diferentes das outras senhas do aplicativo. |
+| `LEADERSHIP`, `RULES_PASS` | Senhas distintas para editar a liderança e as regras. Use pelo menos 16 caracteres e valores diferentes das outras senhas do aplicativo. |
 | `NOTIFICATIONS_PASSWORD` | Senha dos avisos personalizados, mínimo 16 caracteres, diferente de APP_PASSWORD |
 | `SUPER_NOTIFICATIONS_PASSWORD` | Senha para liberar antecipadamente o intervalo de uma hora, mínimo 16 caracteres, diferente de APP_PASSWORD |
 
@@ -57,7 +59,7 @@ bash scripts/oracle-compose.sh up -d --build
 bash scripts/oracle-compose.sh ps
 ```
 
-As duas senhas de avisos são opcionais: sem elas, cada acesso correspondente permanece bloqueado. Adicione-as ao `.env.oracle` privado na VM; o Compose as encaminha ao aplicativo. Para alterar apenas as variáveis após um deploy, recrie o serviço com `docker compose --env-file .env.oracle -f compose.oracle.yml up -d --no-deps clanboard`. Reiniciar o contêiner existente não atualiza o ambiente.
+Configure as senhas dos três clãs e dos dois editores no `.env.oracle` privado da VM. Uma senha vazia mantém a área de gestão correspondente bloqueada. Para alterar apenas as variáveis após um deploy, recrie o serviço com `docker compose --env-file .env.oracle -f compose.oracle.yml up -d --no-deps clanboard`.
 
 O site deve abrir sem login; o painel deve pedir as credenciais existentes. Confira os clãs, o desbloqueio dos contatos e os dados após reiniciar o serviço.
 

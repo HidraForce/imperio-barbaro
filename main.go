@@ -27,21 +27,22 @@ import (
 var webFiles embed.FS
 
 type app struct {
-	db            *database
-	clash         *http.Client
-	token         string
-	clanTags      map[string]string
-	staticFS      fs.FS
-	contactsVault *contactVault
-	customVault   *contactVault
-	timerVault    *contactVault
-	cacheMu       sync.Mutex
-	cache         map[string]clashCacheEntry
-	pending       map[string]*clashFlight
-	retryAt       time.Time
-	moderationMu  sync.Mutex
-	membersMu     sync.Mutex
-	notifications *notificationService
+	db                     *database
+	clash                  *http.Client
+	token                  string
+	clanTags               map[string]string
+	staticFS               fs.FS
+	contactsVault          *contactVault
+	clanAnnouncementVaults map[string]*contactVault
+	customVault            *contactVault
+	timerVault             *contactVault
+	cacheMu                sync.Mutex
+	cache                  map[string]clashCacheEntry
+	pending                map[string]*clashFlight
+	retryAt                time.Time
+	moderationMu           sync.Mutex
+	membersMu              sync.Mutex
+	notifications          *notificationService
 }
 
 func main() {
@@ -55,10 +56,23 @@ func main() {
 	if contactsPassword != "" && (!validCredentials("contatos", contactsPassword) || contactsPassword == password) {
 		log.Fatal("CONTACTS_PASSWORD deve ter pelo menos 16 caracteres e ser diferente de APP_PASSWORD.")
 	}
-	for _, name := range []string{"NOTIFICATIONS_PASSWORD", "SUPER_NOTIFICATIONS_PASSWORD"} {
-		if value := os.Getenv(name); value != "" && (!validCredentials("avisos", value) || value == password) {
+	customPassword, timerPassword := os.Getenv("NOTIFICATIONS_PASSWORD"), os.Getenv("SUPER_NOTIFICATIONS_PASSWORD")
+	for name, value := range map[string]string{"NOTIFICATIONS_PASSWORD": customPassword, "SUPER_NOTIFICATIONS_PASSWORD": timerPassword} {
+		if value != "" && (!validCredentials("avisos", value) || value == password) {
 			log.Fatalf("%s deve ter pelo menos 16 caracteres e ser diferente de APP_PASSWORD.", name)
 		}
+	}
+	clanPasswords := make(map[string]string, len(communityClans))
+	leadershipPassword, rulesPassword := os.Getenv("LEADERSHIP"), os.Getenv("RULES_PASS")
+	dedicatedPasswords := map[string]string{"LEADERSHIP": leadershipPassword, "RULES_PASS": rulesPassword}
+	for _, clan := range communityClans {
+		name := clanAnnouncementPasswordName(clan.ID)
+		secret := os.Getenv(name)
+		clanPasswords[clan.ID] = secret
+		dedicatedPasswords[name] = secret
+	}
+	if err := validateDedicatedPasswords(dedicatedPasswords, password, contactsPassword, customPassword, timerPassword); err != nil {
+		log.Fatal(err)
 	}
 	db, err := openDatabase()
 	if err != nil {
@@ -120,7 +134,7 @@ func main() {
 		contactsVault: vault,
 		notifications: notifications,
 	}
-	if err := a.initAnnouncementAccess(os.Getenv("NOTIFICATIONS_PASSWORD"), os.Getenv("SUPER_NOTIFICATIONS_PASSWORD")); err != nil {
+	if err := a.initAnnouncementAccess(customPassword, timerPassword, clanPasswords); err != nil {
 		log.Fatal(err)
 	}
 	r := chi.NewRouter()
@@ -132,17 +146,14 @@ func main() {
 		jsonResponse(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 	r.Get("/api/config", a.config)
-	r.Get("/api/leadership", a.leadership)
-	r.Put("/api/leadership", a.saveLeadership)
-	r.Get("/api/rules", a.rules)
-	r.Put("/api/rules", a.saveRules)
+	if err := a.editorAccessRoutes(r, leadershipPassword, rulesPassword); err != nil {
+		log.Fatal(err)
+	}
 	r.Get("/api/moderation", a.moderation)
 	r.Post("/api/moderation", a.saveModeration)
 	r.Put("/api/moderation/{id}", a.saveModeration)
 	r.Put("/api/moderation-settings", a.saveModerationSettings)
 	r.Post("/api/moderation/sync", a.syncModeration)
-	r.Get("/api/announcements", a.announcementStatus)
-	r.Post("/api/announcements", a.sendAnnouncement)
 	a.announcementAccessRoutes(r)
 	r.Get("/api/clan", a.clan)
 	r.Get("/api/war", a.war)

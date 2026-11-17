@@ -1,5 +1,5 @@
 importScripts('/pwa-state-worker.js');
-const CACHE='imperio-members-v6';
+const CACHE='imperio-members-v7';
 const SHELL=['/app','/member.js','/member.css','/pwa-state.js','/member.webmanifest','/app-icon-192.png','/app-icon-512.png','/app-icon-180.png','/notification-badge.png'];
 self.addEventListener('install',event=>{event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(SHELL)).then(()=>self.skipWaiting()))});
 async function activateMembers(){

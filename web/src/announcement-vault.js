@@ -2,9 +2,12 @@ import { ref } from 'vue'
 import { adminAPI } from './admin-api.js'
 
 export function createAnnouncementVault(scope, header, api = adminAPI) {
+  return createScopedVault('/api/announcements/' + scope, header, api)
+}
+
+export function createScopedVault(path, header, api = adminAPI) {
   const password = ref(''), unlocked = ref(false), busy = ref(false), error = ref('')
   let token = '', generation = 0, timer
-  const path = '/api/announcements/' + scope
   function revoke(session) {
     if (session) void api(path + '/session', { method: 'DELETE', keepalive: true, headers: { [header]: session } }).catch(() => {})
   }
@@ -37,11 +40,12 @@ export function createAnnouncementVault(scope, header, api = adminAPI) {
       if (current === generation) lock(failure.message)
     } finally { if (current === generation) busy.value = false }
   }
-  async function request(url, options = {}) {
+  async function request(url, options = {}, send = api) {
     if (!token) throw Error('Desbloqueie este acesso para continuar.')
-    try { return await api(url, { ...options, headers: { ...options.headers, [header]: token } }) }
+    const current = generation
+    try { return await send(url, { ...options, headers: { ...options.headers, [header]: token } }) }
     catch (failure) {
-      if ([401, 423].includes(failure.status)) lock(failure.message)
+      if (current === generation && [401, 423].includes(failure.status)) lock(failure.message)
       throw failure
     }
   }

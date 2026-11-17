@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 
-const props = defineProps({ clans: { type: Array, required: true } })
+const props = defineProps({ clans: { type: Array, required: true }, request: { type: Function, required: true } })
 const ruleLinks = computed(() => [
   { name: 'Regras do grupo geral', url: 'https://imperiobarbaro.com.br/#regras-gerais' },
   ...props.clans.map(clan => ({ name: 'Regras · ' + clan.label, url: 'https://imperiobarbaro.com.br/#' + clan.rulesAnchor })),
@@ -40,21 +40,10 @@ function parseDocument(value) {
 
 async function request(options = {}) {
   requestController = new AbortController()
-  const response = await fetch('/api/leadership', {
+  const result = await props.request('/api/leadership', {
     ...options,
-    credentials: 'same-origin',
-    cache: 'no-store',
     signal: requestController.signal,
-    headers: { 'X-Clanboard-Request': '1', 'Content-Type': 'application/json' },
   })
-  const result = await response.json().catch(() => null)
-  if (!response.ok) {
-    const failure = new Error(response.status === 401
-      ? 'Sua sessão expirou. Entre novamente no painel para salvar a liderança.'
-      : result?.error || result?.message || `Não foi possível acessar a liderança (${response.status}).`)
-    failure.status = response.status
-    throw failure
-  }
   return parseDocument(result)
 }
 

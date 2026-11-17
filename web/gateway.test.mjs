@@ -138,11 +138,20 @@ test('Leitura pública de liderança não encaminha credenciais e nunca permite 
  const failed=await invoke(broken,'/public/leadership',headers);assert.equal(failed.code,502);assert.ok(!failed.data.includes('private error'))
 })
 
- test('Private warning requests forward both scoped session headers',async()=>{
+ test('Private announcement requests forward clan and specialized session headers',async()=>{
  let headers
  const handler=createGateway({apiBase:'https://api.internal',fetcher:async(url,options)=>{headers=options.headers;return new Response('{}')}})
- const response=await invoke(handler,'/api/announcements/custom',{'x-clanboard-request':'1','x-notifications-session':'custom','x-super-notifications-session':'timer'},'POST','{}')
+ const response=await invoke(handler,'/api/announcements/custom',{'x-clanboard-request':'1','x-clan-announcements-session':'clan','x-notifications-session':'custom','x-super-notifications-session':'timer'},'POST','{}')
  assert.equal(response.code,200)
  assert.equal(headers.get('x-notifications-session'),'custom')
+ assert.equal(headers.get('x-clan-announcements-session'),'clan')
  assert.equal(headers.get('x-super-notifications-session'),'timer')
+})
+
+test('Editor requests forward the scoped session to the dashboard API',async()=>{
+ let headers
+ const handler=createGateway({apiBase:'https://api.internal',fetcher:async(url,options)=>{headers=options.headers;return new Response('{}')}})
+ const response=await invoke(handler,'/api/rules',{'x-clanboard-request':'1','x-editor-session':'rules-token'},'PUT','{}')
+ assert.equal(response.code,200)
+ assert.equal(headers.get('x-editor-session'),'rules-token')
 })
