@@ -72,14 +72,14 @@ async function resetTimer(kind){
  catch(e){if(clan===props.clanId)error.value=e.message}
  finally{busy.value=false;await load(true)}
 }
-function lockAccess(){if(document.hidden)lockAll()}
+function resumeAccess(){if(!document.hidden){clanVault.resume();vault.resume();timerVault.resume()}}
 function lockAll(){clanVault.lock();vault.lock();timerVault.lock()}
 watch(clanVault.unlocked,unlocked=>{
  if(!unlocked){vault.lock();timerVault.lock();title.value='';body.value='';feedback.value='';sentNoticeURL.value=''}
  load()
 })
-onMounted(()=>{document.addEventListener('visibilitychange',lockAccess);window.addEventListener('pagehide',lockAll);load();timer=setInterval(()=>{now.value=Date.now()},1000);poll=setInterval(()=>{if(!document.hidden&&!busy.value)load(true)},15000)})
-onUnmounted(()=>{document.removeEventListener('visibilitychange',lockAccess);window.removeEventListener('pagehide',lockAll);lockAll();generation++;clearInterval(timer);clearInterval(poll)})
+onMounted(()=>{document.addEventListener('visibilitychange',resumeAccess);window.addEventListener('pageshow',resumeAccess);load();timer=setInterval(()=>{now.value=Date.now()},1000);poll=setInterval(()=>{if(!document.hidden&&!busy.value)load(true)},15000)})
+onUnmounted(()=>{document.removeEventListener('visibilitychange',resumeAccess);window.removeEventListener('pageshow',resumeAccess);clanVault.dispose();vault.dispose();timerVault.dispose();generation++;clearInterval(timer);clearInterval(poll)})
 </script>
 <template>
  <section class="announcements-panel">
@@ -102,10 +102,10 @@ onUnmounted(()=>{document.removeEventListener('visibilitychange',lockAccess);win
    <section class="timer-access custom-announcement"><div class="section"><div><small>ACESSO PROTEGIDO</small><h2>Liberar intervalo</h2><p>Use a senha de liberação para antecipar um botão. Isso não envia um aviso e mantém a regra das 12 horas de guerra.</p></div><button v-if="timerVault.unlocked.value" class="secondary" @click="timerVault.lock()">Bloquear liberação</button></div>
     <p v-if="!data.timerConfigured" class="notice">A senha de liberação do intervalo ainda não foi configurada.</p>
     <form v-else-if="!timerVault.unlocked.value" @submit.prevent="timerVault.unlock"><label>Senha de liberação do intervalo<input v-model="timerVault.password.value" type="password" autocomplete="off" required :disabled="timerVault.busy.value"></label><button class="secondary" :disabled="timerVault.busy.value">{{ timerVault.busy.value?'Desbloqueando…':'Desbloquear liberação' }}</button></form>
-    <p v-else class="notice">Liberação disponível por dez minutos. Use “Liberar agora” no botão desejado. Ao ocultar o painel, este acesso bloqueia.</p><p v-if="timerVault.error.value" role="alert">{{ timerVault.error.value }}</p>
+    <p v-else class="notice">Liberação disponível por até dez minutos, mesmo ao trocar de aplicativo ou recarregar a página. Use “Liberar agora” no botão desejado.</p><p v-if="timerVault.error.value" role="alert">{{ timerVault.error.value }}</p>
    </section>
    <div class="announcement-grid"><article v-for="item in data.templates" :key="item.kind" class="announcement-card"><small>{{ data.clanName }} · {{ item.label }}</small><h3>{{ item.title }}</h3><p>{{ item.body }}</p><button class="primary" :disabled="busy||remaining(item.kind)>0||!!warBlock(item.kind)" @click="send(item.kind)">{{ remaining(item.kind)?waitLabel(item.kind):warBlock(item.kind)||'Enviar aviso' }}</button><button v-if="remaining(item.kind)>0&&timerVault.unlocked.value" class="secondary" :disabled="busy" @click="resetTimer(item.kind)">Liberar agora</button></article></div>
-   <section class="custom-announcement"><div class="section"><div><small>ACESSO PROTEGIDO</small><h2>Aviso personalizado</h2><p>Use a senha exclusiva de avisos personalizados. A sessão bloqueia ao ocultar o painel e expira em dez minutos.</p></div><button v-if="vault.unlocked.value" class="secondary" @click="vault.lock()">Bloquear</button></div>
+   <section class="custom-announcement"><div class="section"><div><small>ACESSO PROTEGIDO</small><h2>Aviso personalizado</h2><p>Use a senha exclusiva de avisos personalizados. O acesso dura até dez minutos, mesmo ao trocar de aplicativo ou recarregar a página.</p></div><button v-if="vault.unlocked.value" class="secondary" @click="vault.lock()">Bloquear</button></div>
     <p v-if="!data.customConfigured" class="notice">A senha de avisos personalizados ainda não foi configurada.</p>
     <form v-else-if="!vault.unlocked.value" @submit.prevent="vault.unlock"><label>Senha de avisos personalizados<input v-model="vault.password.value" type="password" autocomplete="off" required :disabled="vault.busy.value"></label><button class="primary" :disabled="vault.busy.value">{{ vault.busy.value?'Desbloqueando…':'Desbloquear' }}</button><p v-if="vault.error.value" role="alert">{{ vault.error.value }}</p></form>
     <form v-else @submit.prevent="send('custom')"><label>Título<input v-model="title" maxlength="70" required placeholder="Ex.: Reunião da liderança"></label><label>Mensagem curta<textarea v-model="body" maxlength="240" required rows="3" placeholder="Escreva o que o membro precisa saber ou fazer."></textarea><small>{{ body.length }}/240</small></label><div v-if="title||body" class="announcement-preview"><small>PRÉVIA NO CELULAR · {{ data.clanName }}</small><strong>{{ title||'Título do aviso' }}</strong><p>Clã: {{ data.clanName }}<br>{{ body||'Mensagem do aviso' }}</p></div><button class="primary" :disabled="busy||remaining('custom')>0||!title.trim()||!body.trim()">{{ waitLabel('custom') }}</button><button v-if="remaining('custom')>0&&timerVault.unlocked.value" type="button" class="secondary" :disabled="busy" @click="resetTimer('custom')">Liberar agora</button></form>

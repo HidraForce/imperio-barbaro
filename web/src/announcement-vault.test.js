@@ -26,7 +26,7 @@ test('Clan sessions combine with the existing custom and timer sessions', async 
  }finally{clan.lock();custom.lock();timer.lock()}
 })
 
-test('Hiding while an unlock is in flight revokes the late session',async()=>{
+test('Locking while an unlock is in flight revokes the late session',async()=>{
  let finish
  const calls=[]
  const api=(path,options)=>{calls.push({path,options});return path.endsWith('/unlock')?new Promise(resolve=>finish=resolve):Promise.resolve(null)}

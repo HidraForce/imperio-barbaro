@@ -1,5 +1,5 @@
 <script setup>
-import { onBeforeUnmount, onDeactivated, onMounted } from 'vue'
+import { onActivated, onBeforeUnmount, onMounted } from 'vue'
 import { createScopedVault } from './announcement-vault.js'
 
 const props = defineProps({
@@ -11,17 +11,17 @@ const props = defineProps({
 const vault = createScopedVault('/api/' + props.area, 'X-Editor-Session')
 
 function lock() { vault.lock() }
-function lockWhenHidden() { if (document.hidden) lock() }
+function resumeWhenVisible() { if (!document.hidden) vault.resume() }
 
 onMounted(() => {
-  document.addEventListener('visibilitychange', lockWhenHidden)
-  window.addEventListener('pagehide', lock)
+  document.addEventListener('visibilitychange', resumeWhenVisible)
+  window.addEventListener('pageshow', resumeWhenVisible)
 })
-onDeactivated(lock)
+onActivated(() => vault.resume())
 onBeforeUnmount(() => {
-  document.removeEventListener('visibilitychange', lockWhenHidden)
-  window.removeEventListener('pagehide', lock)
-  lock()
+  document.removeEventListener('visibilitychange', resumeWhenVisible)
+  window.removeEventListener('pageshow', resumeWhenVisible)
+  vault.dispose()
 })
 </script>
 
