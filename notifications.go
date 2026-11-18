@@ -51,7 +51,7 @@ type announcementTemplate struct {
 
 var announcementTemplates = []announcementTemplate{
 	{"war-zero", "Guerra · 0 ataques", "⚔️ Guerra · primeiro ataque", "Está com 0 ataques? Faça seu primeiro ataque na guerra e siga a orientação da liderança."},
-	{"war-second", "Guerra · 1 de 2 ataques", "⚔️ Guerra · segundo ataque liberado", "Já fez 1 de 2 ataques? Use seu segundo ataque em qualquer alvo!"},
+	{"war-second", "Guerra · 1 de 2 ataques", "⚔️ Guerra · segundo ataque liberado", "Restam menos de 9 horas para o fim da guerra! O segundo ataque está liberado. Já fez o primeiro? Use o segundo em qualquer alvo e ajude o clã a conquistar mais estrelas!"},
 	{"raids", "Raids do fim de semana", "🏰 Raids do fim de semana", "Não se esqueça dos ataques nas raids do fim de semana!"},
 	{"games", "Jogos do clã", "🎯 Jogos do clã", "Não se esqueça de fazer seus pontos nos jogos do clã!"},
 	{"cwl", "Liga de Guerra · CWL", "🏆 CWL · um ataque por rodada", "Está escalado na CWL? Não se esqueça do seu único ataque nesta rodada!"},

@@ -20,13 +20,23 @@ import { sortMembers } from './member-sort.js'
 import ModerationPanel from './ModerationPanel.vue'
 import { moderationSummary, moderationLabel } from './moderation.js'
 import { ownSide, seasonRows, battleCSV, battlePending, raidPending } from './battle-report.js'
-const tab=ref('Overview'), clan=ref(null), war=ref(null),  config=ref({configured:false,clans:[]}), selectedClan=ref('1'), loading=ref(true), error=ref(''), warError=ref(''), raidError=ref('')
+const tabs=['Overview','Announcements','Raids','CWL','War','Roster','Contacts','Moderation','Rules','Leadership']
+const viewStorageKey='clanboard:dashboard-view'
+let savedView={}
+try {
+ const view=JSON.parse(sessionStorage.getItem(viewStorageKey)||'null')
+ if(view?.expiresAt>Date.now())savedView=view
+} catch {}
+const tab=ref(tabs.includes(savedView.tab)?savedView.tab:'Overview'), clan=ref(null), war=ref(null), config=ref({configured:false,clans:[]}), selectedClan=ref(['1','2','3'].includes(savedView.clan)?savedView.clan:'1'), loading=ref(true), error=ref(''), warError=ref(''), raidError=ref('')
+function rememberView(){
+ try{sessionStorage.setItem(viewStorageKey,JSON.stringify({tab:tab.value,clan:selectedClan.value,expiresAt:Date.now()+10*60*1000}))}catch{}
+}
+watch([tab,selectedClan],rememberView)
 const contactVault=createContactVault(),includeNumbers=ref(false),phoneCoverage=ref(null)
 provide('contactVault',contactVault)
 watch(contactVault.unlocked,value=>{if(!value)includeNumbers.value=false})
 const messagePhones=computed(()=>contactVault.unlocked.value&&includeNumbers.value?contactPhoneIndex(contactVault.contacts.value):{})
-function hideContacts(){if(document.hidden)contactVault.lock()}
-function leaveContacts(){contactVault.lock()}
+function resumeContacts(){if(!document.hidden)contactVault.resume()}
 const leagueGroup=ref(null), leagueWar=ref(null), leagueLoading=ref(false), leagueWarLoading=ref(false), leagueError=ref(''), leagueMessage=ref(''), roundMessage=ref(''), roundError=ref(''), selectedRound=ref(1)
 let leagueRequest=0, roundRequest=0, allRoundsRequest=0
 const leagueView=ref('round'), allRounds=ref([]), allRoundsLoading=ref(false)
@@ -87,7 +97,6 @@ const moderationNow=ref(Date.now())
 let moderationTimer
 const disciplinePlayers=computed(()=>moderationSummary(moderationRecords.value,moderationNow.value))
 function disciplineFor(tag){return disciplinePlayers.value.find(p=>p.tag.replace(/^#/,'').toUpperCase()===tag.replace(/^#/,'').toUpperCase())}
-const tabs=['Overview','Announcements','Raids','CWL','War','Roster','Contacts','Moderation','Rules','Leadership']
 const tabLabels={Overview:'Visão geral',Announcements:'Comunicados',Raids:'Raids',CWL:'Liga',War:'Guerra',Roster:'Membros',Contacts:'Contatos',Leadership:'Liderança',Rules:'Regras',Moderation:'Avisos e punições'}
 const members=computed(()=>clan.value?.memberList||[]), warMembers=computed(()=>war.value?.clan?.members||[])
 const rosterSort=ref('trophies-desc')
@@ -189,8 +198,8 @@ const messageItems=computed(()=>{
  return withClanPresence(items,currentRoster.value)
 })
 watch(tab,()=>window.scrollTo({top:0,behavior:'instant'}))
-onMounted(()=>{moderationTimer=setInterval(()=>{moderationNow.value=Date.now()},1000);load();document.addEventListener('visibilitychange',hideContacts);window.addEventListener('pagehide',leaveContacts)})
-onUnmounted(()=>{clearInterval(moderationTimer);document.removeEventListener('visibilitychange',hideContacts);window.removeEventListener('pagehide',leaveContacts);contactVault.lock()})
+onMounted(()=>{moderationTimer=setInterval(()=>{moderationNow.value=Date.now()},1000);rememberView();contactVault.resume();load();document.addEventListener('visibilitychange',resumeContacts);window.addEventListener('pageshow',resumeContacts);window.addEventListener('pagehide',rememberView)})
+onUnmounted(()=>{clearInterval(moderationTimer);document.removeEventListener('visibilitychange',resumeContacts);window.removeEventListener('pageshow',resumeContacts);window.removeEventListener('pagehide',rememberView);contactVault.dispose()})
 </script>
 <template>
 <div class="shell">

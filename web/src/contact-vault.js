@@ -1,13 +1,19 @@
 import { ref } from 'vue'
+import { createVaultSession } from './vault-session.js'
 
 const emptyAccount = () => ({ playerTag: '', playerName: '', clanId: '' })
 const emptyForm = () => ({ id: 0, realName: '', phone: '', notes: '', accounts: [emptyAccount()] })
 
 export function createContactVault(fetcher = (...args) => fetch(...args)) {
   const contacts = ref([]), form = ref(emptyForm()), password = ref(''), unlocked = ref(false), busy = ref(false), error = ref(''), showForm = ref(false)
-  let token = '', generation = 0, timer
+  const sessionCache = createVaultSession('/api/contacts')
+  let token = '', expiresAt = 0, generation = 0, timer, disposed = false
 
   async function request(path, options = {}, session = token) {
+    if (session && session === token && Date.now() >= expiresAt) {
+      lock('O acesso aos contatos expirou. Desbloqueie novamente.')
+      throw Error('O acesso aos contatos expirou. Desbloqueie novamente.')
+    }
     const headers = new Headers(options.headers)
     headers.set('X-Clanboard-Request', '1')
     if (session) headers.set('X-Contacts-Session', session)
@@ -25,11 +31,11 @@ export function createContactVault(fetcher = (...args) => fetch(...args)) {
     if (session) void request('/api/contacts/session', { method: 'DELETE', keepalive: true }, session).catch(() => {})
   }
 
-  function lock(message = '') {
-    const previous = token
+  function reset(message = '') {
     generation++
     clearTimeout(timer)
     token = ''
+    expiresAt = 0
     unlocked.value = false
     contacts.value = []
     form.value = emptyForm()
@@ -37,11 +43,41 @@ export function createContactVault(fetcher = (...args) => fetch(...args)) {
     showForm.value = false
     busy.value = false
     error.value = message
+  }
+
+  function lock(message = '') {
+    const previous = token
+    sessionCache.clear()
+    reset(message)
     revoke(previous)
   }
 
+  function useSession(session) {
+    token = session.token
+    expiresAt = session.expiresAt
+    unlocked.value = true
+    timer = setTimeout(() => lock('O acesso aos contatos expirou. Desbloqueie novamente.'), expiresAt - Date.now())
+  }
+
+  async function resume() {
+    if (disposed) return
+    if (token) {
+      if (Date.now() >= expiresAt) lock('O acesso aos contatos expirou. Desbloqueie novamente.')
+      return
+    }
+    const session = sessionCache.restore()
+    if (!session) return
+    useSession(session)
+    await refresh()
+  }
+
+  function dispose() {
+    disposed = true
+    reset()
+  }
+
   async function unlock() {
-    if (busy.value || unlocked.value) return
+    if (disposed || busy.value || unlocked.value) return
     const current = ++generation
     busy.value = true
     error.value = ''
@@ -50,11 +86,8 @@ export function createContactVault(fetcher = (...args) => fetch(...args)) {
     try {
       const result = await request('/api/contacts/unlock', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: secret }) })
       if (current !== generation) { revoke(result.token); return }
-      const lifetime = Date.parse(result.expiresAt) - Date.now()
-      if (!result.token || !Number.isFinite(lifetime) || lifetime <= 0) { revoke(result.token); throw Error('O desbloqueio expirou. Tente novamente.') }
-      token = result.token
-      unlocked.value = true
-      timer = setTimeout(() => lock('O acesso aos contatos expirou. Desbloqueie novamente.'), Math.min(lifetime, 10 * 60 * 1000))
+      try { useSession(sessionCache.save(result)) }
+      catch (failure) { revoke(result.token); throw failure }
       const items = await request('/api/contacts')
       if (current === generation) contacts.value = items
     } catch (failure) {
@@ -99,7 +132,7 @@ export function createContactVault(fetcher = (...args) => fetch(...args)) {
   function edit(contact) { if (!unlocked.value||busy.value) return; form.value={id:contact.id,realName:contact.realName,phone:contact.phone,notes:contact.notes,accounts:contact.accounts.map(account=>({...account}))};showForm.value=true;error.value='' }
   function addAccount() { if (form.value.accounts.length<20) form.value.accounts.push(emptyAccount()) }
   function removeAccount(index) { if(form.value.accounts.length>1) form.value.accounts.splice(index,1) }
-  return { contacts, form, password, unlocked, busy, error, showForm, unlock, lock, refresh, startNew, edit, addAccount, removeAccount, request,
+  return { contacts, form, password, unlocked, busy, error, showForm, unlock, lock, refresh, resume, dispose, startNew, edit, addAccount, removeAccount, request,
     merge: (targetId,sourceId) => change('/api/contacts/merge', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({targetId:Number(targetId),sourceId:Number(sourceId)})}),
     save: () => change('/api/contacts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form.value) }),
     remove: id => change('/api/contacts/' + id, { method: 'DELETE' }),
