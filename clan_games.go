@@ -251,6 +251,9 @@ func clanGamesMemberRow(event clanGamesEvent, member *clanGamesSnapshot, now tim
 		row.Reason = member.Failure
 	case member.ReviewReason != "":
 		row.Reason = member.ReviewReason
+		if row.Reason == "Entrada observada após o início; confira a participação e os pontos anteriores." {
+			row.Reason = "Primeira observação após o início; a participação e os pontos anteriores precisam de conferência."
+		}
 	case member.TownHallLevel < 6:
 		row.Reason = "Elegibilidade ainda não confirmada."
 	case !member.Current && !member.Final:
@@ -456,7 +459,11 @@ func applyClanGamesRoster(doc *clanGamesDocument, roster []clanGamesRosterMember
 		if member == nil {
 			member = &clanGamesSnapshot{Tag: person.Tag, FirstSeen: at.UTC().Format(time.RFC3339Nano)}
 			if !at.Before(start) {
-				member.ReviewReason = "Entrada observada após o início; confira a participação e os pontos anteriores."
+				if previous.IsZero() {
+					member.ReviewReason = "Primeira coleta após o início dos jogos; os pontos anteriores não foram registrados."
+				} else {
+					member.ReviewReason = "Entrada no clã observada durante os jogos; confira a participação e os pontos anteriores."
+				}
 			}
 			doc.Members[person.Tag] = member
 		} else if !member.Current && !at.Before(start) && !member.Final {
