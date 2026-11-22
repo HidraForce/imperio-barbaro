@@ -21,10 +21,30 @@ export function clanGamesPoints(row) {
   return row.partial ? `${points} observados` : points
 }
 
+export function buildObservedClanGamesProgress(items, event = {}) {
+  const accounts = items.filter(row => row.current === true && row.status !== 'ineligible')
+  const observed = accounts.filter(row => Number.isFinite(row.points) && row.points >= 0)
+  const baselineTimes = accounts.map(row => ({ value: row.baselineAt, time: Date.parse(row.baselineAt) })).filter(baseline => Number.isFinite(baseline.time)).sort((left, right) => left.time - right.time)
+  const firstBaseline = baselineTimes[0]
+  const allPartial = accounts.length > 0 && accounts.every(row => row.partial === true)
+  return {
+    points: observed.length ? observed.reduce((points, row) => points + row.points, 0) : null,
+    participants: observed.filter(row => row.points > 0).length,
+    zero: observed.filter(row => row.points === 0).length,
+    missing: accounts.length - observed.length,
+    accounts: accounts.length,
+    firstBaselineAt: firstBaseline?.value || '',
+    allPartial,
+    lateBaseline: allPartial && Number.isFinite(Date.parse(event.startTime)) && Boolean(firstBaseline) && firstBaseline.time >= Date.parse(event.startTime),
+  }
+}
+
 export function visibleClanGames(items, status = 'all', presence = 'all') {
   return items.filter(row => {
     if (presence === 'current' && row.current !== true) return false
     if (presence === 'former' && row.current !== false) return false
+    if (status === 'observed-positive') return Number.isFinite(row.points) && row.points > 0
+    if (status === 'observed-zero') return row.points === 0
     if (status === 'below') return !row.partial && ['zero', 'contributing'].includes(row.status) && Number.isFinite(row.points) && row.points < row.target
     return status === 'all' || row.status === status
   }).sort((left, right) => {

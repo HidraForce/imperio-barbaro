@@ -150,6 +150,66 @@ func TestClanGamesEligibilityZeroAndRoleTargets(t *testing.T) {
 	}
 }
 
+func TestClanGamesInitialLateRosterDoesNotInferMemberJoin(t *testing.T) {
+	doc, start, _, floor, cutoff := gamesTestDocument(t)
+	firstAt := start.Add(time.Hour)
+	roster := []clanGamesRosterMember{{Tag: "#P0Y8LQ", Name: "Membro existente", Role: "member", TownHallLevel: 15}}
+	applyClanGamesRoster(&doc, roster, firstAt)
+	if err := applyClanGamesProfile(&doc, "#P0Y8LQ", gamesTestProfile(100000), "QY8L0P", firstAt, floor, cutoff); err != nil {
+		t.Fatal(err)
+	}
+	first := clanGamesMemberRow(doc.Event, doc.Members["#P0Y8LQ"], firstAt)
+	if first.Status != "review" || !first.Partial || !strings.Contains(first.Reason, "Primeira coleta") || strings.Contains(first.Reason, "Entrada") {
+		t.Fatal("initial capture inferred a join", first)
+	}
+	roster = append(roster, clanGamesRosterMember{Tag: "#QY8L0P", Name: "Novo membro", Role: "member", TownHallLevel: 15})
+	applyClanGamesRoster(&doc, roster, firstAt.Add(time.Minute))
+	profile := gamesTestProfile(200000)
+	profile.Tag = "#QY8L0P"
+	if err := applyClanGamesProfile(&doc, profile.Tag, profile, "QY8L0P", firstAt.Add(time.Minute), floor, cutoff); err != nil {
+		t.Fatal(err)
+	}
+	newcomer := clanGamesMemberRow(doc.Event, doc.Members[profile.Tag], firstAt.Add(time.Minute))
+	if newcomer.Status != "review" || !newcomer.Partial || !strings.Contains(newcomer.Reason, "Entrada no clã observada") {
+		t.Fatal("subsequent arrival lost membership uncertainty", newcomer)
+	}
+	view := clanGamesView(doc, firstAt.Add(time.Minute))
+	if view.Summary.Zero != 0 || view.Summary.Points != 0 || view.Summary.Participants != 0 || view.Summary.Review != 2 || doc.Members["#P0Y8LQ"].ReviewReason != first.Reason {
+		t.Fatal("late collection became confirmed participation", view)
+	}
+}
+
+func TestClanGamesLegacyObservationReasonDoesNotInventJoin(t *testing.T) {
+	doc, start, _, floor, cutoff := gamesTestDocument(t)
+	firstAt := start.Add(time.Hour)
+	applyClanGamesRoster(&doc, []clanGamesRosterMember{{Tag: "#P0Y8LQ", Name: "Jogador", Role: "member", TownHallLevel: 15}}, firstAt)
+	if err := applyClanGamesProfile(&doc, "#P0Y8LQ", gamesTestProfile(100000), "QY8L0P", firstAt, floor, cutoff); err != nil {
+		t.Fatal(err)
+	}
+	if err := applyClanGamesProfile(&doc, "#P0Y8LQ", gamesTestProfile(100500), "QY8L0P", firstAt.Add(time.Minute), floor, cutoff); err != nil {
+		t.Fatal(err)
+	}
+	legacyReason := "Entrada observada após o início; confira a participação e os pontos anteriores."
+	doc.Members["#P0Y8LQ"].ReviewReason = legacyReason
+	payload, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stored clanGamesDocument
+	if err = json.Unmarshal(payload, &stored); err != nil {
+		t.Fatal(err)
+	}
+	view := clanGamesView(stored, firstAt.Add(time.Minute))
+	row := view.Items[0]
+	if row.Status != "review" || !row.Partial || row.Points == nil || *row.Points != 500 || !strings.Contains(row.Reason, "Primeira observação") || strings.Contains(row.Reason, "Entrada") || view.Summary.Points != 0 || view.Summary.Participants != 0 || view.Summary.Zero != 0 {
+		t.Fatal("legacy observation was presented as a join or confirmed contribution", view)
+	}
+	member := stored.Members["#P0Y8LQ"]
+	if member.ReviewReason != legacyReason || *member.Baseline != 100000 || *member.Latest != 100500 {
+		t.Fatal("display mapping changed historical evidence", member)
+	}
+}
+
 func TestClanGamesRejectsUnboundedAndInvalidProfiles(t *testing.T) {
 	for _, name := range []string{"before window", "next event", "missing value", "negative value", "wrong player"} {
 		t.Run(name, func(t *testing.T) {
