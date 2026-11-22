@@ -36,6 +36,7 @@ O token e as senhas ficam no servidor. Não comite arquivos de ambiente, bancos 
 - Visão geral com pendências de raids, guerra e CWL: verde para ataques concluídos, vermelho para pendentes e cinza para ausência de escalação ou dados.
 - Guerra atual, rodadas da CWL e visão de toda a temporada, com exportação CSV.
 - Histórico de até 52 fins de semana de raids e relatórios em texto e CSV. A lista de membros é capturada na primeira sincronização; fins de semana antigos podem não refletir a composição histórica do clã.
+- Jogos do clã com pontos observados por membro, metas por cargo, filtros de participação e exportação CSV. A coleta continua no servidor com o painel fechado.
 - Mensagens coletivas ou individuais para copiar no WhatsApp, incluindo filtros de zero e um ataque na guerra. O aplicativo não envia mensagens automaticamente.
 - Contatos por pessoa, com até 20 contas nos clãs da comunidade e links para WhatsApp. A área exige a segunda senha, bloqueia ao sair ou ocultar a aba e expira em dez minutos.
 - Liderança editável no painel, publicada no site com cargos, responsáveis e vagas.
@@ -69,9 +70,19 @@ Os ícones PNG são derivados do escudo existente. Para regenerar: `python3 scri
 
 ## Cache e segurança
 
-O cache da API dura cinco minutos para membros, um minuto para guerra/CWL e quinze minutos para raids. Consultas simultâneas compartilham a mesma chamada, e respostas 429 respeitam `Retry-After`. A sincronização acontece ao consultar o painel, sem coleta agendada.
+O cache da API dura cinco minutos para membros, um minuto para guerra/CWL e quinze minutos para raids. Consultas simultâneas compartilham a mesma chamada, e respostas 429 respeitam `Retry-After`. Sincronizar reutiliza os dados em cache dentro desses prazos. O acompanhamento de membros e Jogos do clã continua no servidor a cada quinze minutos.
 
 O painel exige HTTPS em produção, limita tentativas de login e rejeita gravações de outras origens. Contatos usam uma sessão separada; essa proteção não criptografa o banco nem seus backups. O contêiner roda sem privilégios adicionais e persiste dados somente no volume.
+
+## Jogos do clã
+
+A aba **Jogos do clã** acompanha cada edição mensal separadamente para cada clã. O servidor consulta os perfis dos jogadores a cada quinze minutos e calcula a diferença do contador cumulativo **Games Champion**. **Sincronizar jogos** solicita uma coleta pelo painel; consultas dentro do prazo do cache reutilizam a resposta disponível. O histórico e as referências iniciais ficam no banco, preservados após reinícios.
+
+Inicie a coleta antes dos jogos para registrar a referência de cada membro. Quem aparece pela primeira vez durante o evento tem somente os pontos observados desde essa primeira consulta, marcados como parciais. Uma referência ausente, falha de consulta, contador inconsistente ou mudança de vínculo com o clã fica **A conferir**, sem ser interpretada como zero confirmado. Pontos pessoais podem pertencer a outro clã e registros a conferir não entram no total atribuído ao clã. Desafios iniciados sem pontos concluídos não são identificados.
+
+As datas iniciais seguem o calendário habitual, do dia 22 às 08:00 UTC ao dia 28 às 08:00 UTC. Confira o calendário e o limite individual no jogo e ajuste **Datas e metas desta edição** antes do evento. A liderança pode definir metas de Membro, Ancião, Colíder e Líder, além da meta total do clã e do limite individual. Esses valores são independentes dos textos publicados em **Regras**; salvar as metas não altera o regulamento público.
+
+O encerramento precisa de uma consulta posterior ao término e de um intervalo de dez minutos para a atualização dos contadores. Sem uma coleta final válida, os registros continuam provisórios. Edições antigas sem referências salvas não podem ser reconstruídas, e consultas de uma nova edição não são somadas à anterior. A tela mantém membros que saíram para conferência e não gera avisos ou punições automaticamente.
 
 ## Desenvolvimento e testes
 

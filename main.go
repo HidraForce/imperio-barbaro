@@ -42,6 +42,7 @@ type app struct {
 	retryAt                time.Time
 	moderationMu           sync.Mutex
 	membersMu              sync.Mutex
+	clanGamesMu            sync.Mutex
 	notifications          *notificationService
 }
 
@@ -96,6 +97,9 @@ func main() {
 		log.Fatal(err)
 	}
 	if err := initMembers(db); err != nil {
+		log.Fatal(err)
+	}
+	if err := initClanGames(db); err != nil {
 		log.Fatal(err)
 	}
 	notifications, err := initNotifications(db)
@@ -156,6 +160,9 @@ func main() {
 	r.Post("/api/moderation/sync", a.syncModeration)
 	a.announcementAccessRoutes(r)
 	r.Get("/api/clan", a.clan)
+	r.Get("/api/clan-games", a.clanGames)
+	r.Post("/api/clan-games/sync", a.syncClanGames)
+	r.Put("/api/clan-games/settings", a.saveClanGamesSettings)
 	r.Get("/api/war", a.war)
 	r.Get("/api/raids", a.raids)
 	r.Get("/api/cwl", a.cwl)
@@ -175,6 +182,7 @@ func main() {
 	port := env("PORT", "2025")
 	log.Printf("Painel disponível na porta :%s", port)
 	go a.runAutomaticWarnings()
+	go a.runClanGamesTracking()
 	go a.runPushDelivery()
 	log.Fatal(secureServer(":"+port, secureHeaders(a.publicPush(a.publicContent(publicHome(assets, r, a.renderHome))))).ListenAndServe())
 }

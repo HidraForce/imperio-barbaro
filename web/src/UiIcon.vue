@@ -11,6 +11,7 @@ const paths = {
   Rules: 'M4 3h16v18H4z M8 7h8 M8 12h8 M8 17h5',
   Moderation: 'M12 3l10 18H2z M12 9v5 M12 17v1',
   Announcements: 'M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9 M9 21h6',
+  ClanGames: 'M5 3h14v5a7 7 0 0 1-14 0z M5 5H2v3a4 4 0 0 0 4 4 M19 5h3v3a4 4 0 0 1-4 4 M12 15v6 M7 21h10 M9 7h6',
   Shield: 'M12 2l9 4v7c0 4-4 7-9 9-5-2-9-5-9-9V6z M12 6v11 M7 11h10',
 }
 </script>
