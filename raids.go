@@ -88,6 +88,8 @@ func (a *app) fetchClashUncached(ctx context.Context, endpoint string) ([]byte, 
 				message = "Esta guerra da liga ainda não está disponível."
 			} else if strings.Contains(endpoint, "currentwar") {
 				message = "Nenhuma guerra atual está disponível para este clã."
+			} else if strings.HasPrefix(endpoint, "/players/") {
+				message = "Jogador não encontrado. Confira a tag e tente novamente."
 			} else {
 				message = "Clã não encontrado. Verifique a tag configurada."
 			}
